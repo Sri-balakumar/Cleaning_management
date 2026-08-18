@@ -1,0 +1,283 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+
+    <record id="view_cleaning_config_form" model="ir.ui.view">
+        <field name="name">cleaning.config.form</field>
+        <field name="model">cleaning.config</field>
+        <field name="arch" type="xml">
+            <form string="Cleaning Recording Settings">
+                <sheet>
+                    <div class="oe_title">
+                        <label for="name" string="Settings"/>
+                        <h1><field name="name" placeholder="Cleaning Recording Settings"/></h1>
+                    </div>
+                    <group>
+                        <group>
+                            <field name="company_id" groups="base.group_multi_company"/>
+                            <field name="active" invisible="1"/>
+                        </group>
+                    </group>
+
+                    <div class="alert alert-light border mb-3" role="status">
+                        <strong>What to set up, in this order:</strong>
+                        <ol class="mb-0 ps-3">
+                            <li><strong>Daily Rounds</strong> - your timezone, and the times cleaning happens each day.</li>
+                            <li><strong>Recording</strong> - how long each clip runs, and how sharp it is.</li>
+                            <li><strong>Who Can Record</strong> - which people are allowed to send a clip.</li>
+                            <li><strong>Keeping Recordings</strong> - how long clips are kept before they are removed.</li>
+                        </ol>
+                    </div>
+
+                    <notebook>
+
+                        <page string="Daily Rounds" name="schedule">
+                            <group>
+                                <group>
+                                    <field name="timezone"/>
+                                    <field name="slot_count"/>
+                                </group>
+                            </group>
+                            <div class="text-muted mb-2">
+                                Every time below is read in the office timezone above,
+                                for everyone - so the window opens at the same moment
+                                no matter where the person looking at it is.
+                            </div>
+                            <field name="slot_ids">
+                                <list editable="bottom">
+                                    <field name="sequence" widget="handle"/>
+                                    <field name="name"/>
+                                    <field name="day_period"/>
+                                    <field name="hour_from" widget="float_time"/>
+                                    <field name="hour_to" widget="float_time"/>
+                                    <field name="mon" optional="show"/>
+                                    <field name="tue" optional="show"/>
+                                    <field name="wed" optional="show"/>
+                                    <field name="thu" optional="show"/>
+                                    <field name="fri" optional="show"/>
+                                    <field name="sat" optional="show"/>
+                                    <field name="sun" optional="show"/>
+                                    <field name="note" optional="hide"/>
+                                    <field name="active" widget="boolean_toggle"/>
+                                </list>
+                            </field>
+                            <div class="text-muted mt-2">
+                                A round cannot run past midnight. For a night round from
+                                22:00 to 02:00, add two rounds: 22:00-23:59 and 00:00-02:00.
+                            </div>
+                        </page>
+
+                        <page string="Showroom Photos" name="reference">
+                            <div class="alert alert-info" role="alert">
+                                <strong>How the check works.</strong>
+                                Photograph the room once, from one spot, looking
+                                each of the four ways, with everything where it
+                                belongs. Every round is then compared against
+                                these, and a view that no longer matches is
+                                flagged.
+                                <br/>
+                                Name each view after what is in it - "Systems",
+                                "Bags area" - rather than which way it faces.
+                                That name is what people are shown when they are
+                                asked to photograph it.
+                            </div>
+
+                            <!-- create/delete are off because there are exactly
+                                 four views and there is never a fifth. Editing
+                                 in place IS "replace one without touching the
+                                 other three". -->
+                            <field name="reference_image_ids" nolabel="1">
+                                <list editable="bottom" create="false" delete="false">
+                                    <field name="sequence" column_invisible="True"/>
+                                    <field name="direction" readonly="1"/>
+                                    <field name="name"/>
+                                    <field name="image" widget="image"
+                                           options="{'size': [90, 90]}"/>
+                                    <field name="instructions"/>
+                                    <field name="has_image" string="Set"/>
+                                </list>
+                            </field>
+
+                            <div class="alert alert-warning mt-2" role="alert"
+                                 invisible="reference_count == 4">
+                                <field name="reference_count" invisible="1"/>
+                                Not every view has an original yet. Views without
+                                one are skipped entirely - they are not asked for
+                                and not scored - so the check only covers the
+                                ones you have set up.
+                            </div>
+
+                            <group string="Warnings">
+                                <group>
+                                    <field name="match_warn_threshold"/>
+                                    <field name="match_alert_threshold"/>
+                                </group>
+                                <group>
+                                    <field name="require_photos" widget="boolean_toggle"/>
+                                </group>
+                            </group>
+                            <div class="alert alert-info" role="alert">
+                                <strong>About these numbers.</strong>
+                                Two photographs of a room where nothing has moved
+                                do not score 100 - the light changes, and nobody
+                                stands in exactly the same place twice. Expect a
+                                good match in the seventies or eighties, and
+                                something genuinely missing to score far lower.
+                                <br/>
+                                Sixty and fifty are a starting point. Leave them
+                                for a week, then open
+                                <em>Reporting &gt; Low Match Rounds</em> and move
+                                them to fit what you actually see.
+                            </div>
+                        </page>
+
+                        <page string="Video" name="recording">
+                            <group>
+                                <group>
+                                    <field name="video_enabled" widget="boolean_toggle"/>
+                                </group>
+                            </group>
+                            <div class="alert alert-secondary" role="alert"
+                                 invisible="video_enabled">
+                                The video is switched off, so a round is the
+                                photographs and nothing else. Everything below
+                                describes the video and is not in use.
+                            </div>
+
+                            <!-- Which physical camera is used is remembered per
+                                 computer, not per company, so it cannot be a
+                                 field here. This button is how you get at it. -->
+                            <div invisible="not video_enabled">
+                            <div class="alert alert-info d-flex align-items-center justify-content-between"
+                                 role="alert">
+                                <span>
+                                    <strong>Choosing the camera.</strong>
+                                    On a computer with more than one camera, pick
+                                    which one to use here. The choice is saved on
+                                    that computer, so each recording station can
+                                    use its own camera.
+                                </span>
+                                <button name="%(showroom_check.action_cleaning_camera_test)d"
+                                        type="action" class="btn btn-primary ms-3"
+                                        icon="fa-video-camera"
+                                        string="Test / choose camera"/>
+                            </div>
+                            <group>
+                                <group string="Length">
+                                    <label for="duration_value"/>
+                                    <div class="o_row">
+                                        <field name="duration_value" class="oe_inline"/>
+                                        <field name="duration_unit" class="oe_inline"/>
+                                    </div>
+                                    <field name="duration_seconds"/>
+                                </group>
+                                <group string="Picture">
+                                    <field name="video_quality"/>
+                                    <field name="video_format"/>
+                                </group>
+                            </group>
+                            <group>
+                                <group string="Storage">
+                                    <field name="estimated_size_mb"/>
+                                </group>
+                            </group>
+                            <div class="alert alert-info mt-2" role="alert">
+                                <strong>Keep recordings short.</strong>
+                                Thirty to sixty seconds is enough to show who arrived and
+                                when. Long recordings produce very large files that take
+                                too long to upload and get cut off part-way.
+                                No sound is recorded.
+                            </div>
+                            </div>
+
+                            <!-- Outside the toggle on purpose: the photographs
+                                 use the camera side too, and they count against
+                                 the upload limit whether or not a video is
+                                 recorded. -->
+                            <group>
+                                <group string="Camera and uploads">
+                                    <field name="camera_facing"/>
+                                    <field name="max_upload_mb"/>
+                                </group>
+                            </group>
+                        </page>
+
+                        <page string="Who Can Record" name="access">
+                            <group>
+                                <group>
+                                    <field name="allowed_user_mode" widget="radio"/>
+                                </group>
+                            </group>
+                            <field name="allowed_user_ids" widget="many2many_tags"
+                                   invisible="allowed_user_mode != 'list'"
+                                   options="{'no_create': True}"/>
+                            <div class="text-muted mt-2">
+                                People also need the Showroom Check
+                                <strong>User</strong> role, which is set per person under
+                                Settings &#8594; Users.
+                            </div>
+                            <group string="Advanced">
+                                <field name="upload_grace_seconds"/>
+                            </group>
+                        </page>
+
+                        <page string="Keeping Recordings" name="retention">
+                            <group>
+                                <group>
+                                    <label for="retention_number"/>
+                                    <div class="o_row">
+                                        <field name="retention_number" class="oe_inline"/>
+                                        <field name="retention_unit" class="oe_inline"/>
+                                    </div>
+                                    <field name="retention_mode"/>
+                                </group>
+                            </group>
+                            <div class="alert alert-warning mt-2" role="alert">
+                                Set the number to <strong>0</strong> to keep recordings
+                                forever.
+                                <br/>
+                                Disk space does not go up the moment a recording is
+                                deleted. The file is marked, then removed during a later
+                                clean-up, usually within a day.
+                            </div>
+                        </page>
+
+                    </notebook>
+                </sheet>
+            </form>
+        </field>
+    </record>
+
+    <record id="view_cleaning_config_list" model="ir.ui.view">
+        <field name="name">cleaning.config.list</field>
+        <field name="model">cleaning.config</field>
+        <field name="arch" type="xml">
+            <list string="Cleaning Settings">
+                <field name="name"/>
+                <field name="company_id" groups="base.group_multi_company"/>
+                <field name="timezone"/>
+                <field name="slot_count"/>
+                <field name="duration_seconds"/>
+                <field name="video_quality"/>
+                <field name="retention_number"/>
+                <field name="retention_unit"/>
+            </list>
+        </field>
+    </record>
+
+    <record id="action_cleaning_config" model="ir.actions.act_window">
+        <field name="name">Cleaning Recording Settings</field>
+        <field name="res_model">cleaning.config</field>
+        <field name="view_mode">list,form</field>
+    </record>
+
+    <!-- The menu has to land on THE settings record, not a list containing one
+         row. A menu item cannot work out a record id in XML, so it points at
+         this instead. -->
+    <record id="action_cleaning_config_open" model="ir.actions.server">
+        <field name="name">Settings</field>
+        <field name="model_id" ref="model_cleaning_config"/>
+        <field name="state">code</field>
+        <field name="code">action = model.action_open_settings()</field>
+    </record>
+
+</odoo>

@@ -1,0 +1,159 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<templates xml:space="preserve">
+
+    <t t-name="showroom_check.CleaningDashboard">
+        <div class="cm-dashboard o_action">
+
+            <div class="cm-header">
+                <div>
+                    <h2 class="cm-title">Cleaning</h2>
+                    <div t-if="data.today" class="text-muted">
+                        <t t-esc="data.today"/>
+                        <span t-if="data.timezone" class="ms-2 small">
+                            (times shown for <t t-esc="data.timezone"/>)
+                        </span>
+                    </div>
+                </div>
+                <div class="cm-header-actions">
+                    <button t-if="env.debug" class="btn btn-sm btn-outline-secondary"
+                            t-on-click="() => this.toggleDiagnostics()">
+                        <i class="fa fa-stethoscope me-1"/> Diagnostics
+                    </button>
+                    <!-- Always offered, open round or not: checking the camera
+                         must never cost the day's real recording. -->
+                    <button t-if="capabilities.supported"
+                            class="btn btn-sm btn-outline-secondary"
+                            t-on-click="() => this.testCamera()">
+                        <i class="fa fa-video-camera me-1"/> Test camera
+                    </button>
+                    <button class="btn btn-sm btn-outline-secondary"
+                            t-on-click="() => this.reload()">
+                        <i class="fa fa-refresh me-1"/> Refresh
+                    </button>
+                    <button t-if="data.is_manager" class="btn btn-sm btn-outline-primary"
+                            t-on-click="() => this.openSettings()">
+                        <i class="fa fa-cog me-1"/> Settings
+                    </button>
+                </div>
+            </div>
+
+            <DiagnosticsPanel t-if="ui.showDiagnostics" settings="data.settings || {}"/>
+
+            <!-- Loading -->
+            <div t-if="state.loading" class="text-center py-5">
+                <div class="spinner-border text-primary" role="status"/>
+            </div>
+
+            <t t-else="">
+
+                <!-- Could not reach the server -->
+                <div t-if="state.error" class="alert alert-danger" role="alert">
+                    <h5 class="alert-heading">Could not load today's rounds</h5>
+                    <p class="mb-2">
+                        Check your connection. This page will keep trying on its own.
+                    </p>
+                    <button class="btn btn-sm btn-danger" t-on-click="() => this.reload()">
+                        Try again now
+                    </button>
+                </div>
+
+                <t t-else="">
+
+                    <!--
+                        The camera cannot be used over a plain http address.
+                        This is a browser security rule, so it is shown as a
+                        panel that cannot be dismissed rather than a passing
+                        message - nothing on this page works until it is sorted.
+                    -->
+                    <div t-if="capabilities.blocker === 'insecure_origin'"
+                         class="cm-blocker" role="alert">
+                        <div class="cm-blocker-icon">🎥</div>
+                        <h4>Recording needs a secure (https) connection</h4>
+                        <p>
+                            Your browser will not let a page use the camera unless the
+                            address starts with <strong>https</strong>, so the Record
+                            button cannot be used from here.
+                        </p>
+                        <p class="mb-2">
+                            You are connected to:
+                            <code><t t-esc="currentOrigin"/></code>
+                        </p>
+                        <p class="mb-2">
+                            Please tell whoever looks after your Odoo server:
+                            <em>"The cleaning page needs to be served over https,
+                            otherwise the browser blocks the webcam."</em>
+                        </p>
+                        <p class="text-muted small mb-0">
+                            This is a browser security rule, not an Odoo setting.
+                            There is nothing wrong with your camera.
+                        </p>
+                    </div>
+
+                    <div t-elif="capabilities.blocker" class="cm-blocker" role="alert">
+                        <div class="cm-blocker-icon">🎥</div>
+                        <h4>This browser cannot record video</h4>
+                        <p class="mb-0">
+                            Please open Odoo in Google Chrome or Microsoft Edge on a
+                            computer with a camera.
+                        </p>
+                    </div>
+
+                    <!-- Not allowed to record -->
+                    <div t-if="!data.is_allowed and data.deny_message"
+                         class="alert alert-secondary" role="alert">
+                        <i class="fa fa-lock me-1"/>
+                        <t t-esc="data.deny_message"/>
+                    </div>
+
+                    <!-- Nothing set up yet -->
+                    <div t-if="!slots.length" class="cm-empty">
+                        <div class="cm-blocker-icon">🧹</div>
+                        <h4>No cleaning rounds today</h4>
+                        <p t-if="data.is_manager" class="mb-3">
+                            Set up the daily rounds and their times to get started.
+                        </p>
+                        <p t-else="" class="mb-0">
+                            Your administrator has not set up any rounds for today.
+                        </p>
+                        <button t-if="data.is_manager" class="btn btn-primary"
+                                t-on-click="() => this.openSettings()">
+                            Set up rounds
+                        </button>
+                    </div>
+
+                    <t t-else="">
+                        <!-- Today at a glance -->
+                        <div class="cm-summary">
+                            <div class="cm-stat">
+                                <div class="cm-stat-value"><t t-esc="data.today_done"/></div>
+                                <div class="cm-stat-label">Recorded</div>
+                            </div>
+                            <div class="cm-stat">
+                                <div class="cm-stat-value"><t t-esc="data.today_total"/></div>
+                                <div class="cm-stat-label">Rounds today</div>
+                            </div>
+                            <div t-att-class="data.today_missed ? 'cm-stat cm-stat-bad' : 'cm-stat'">
+                                <div class="cm-stat-value"><t t-esc="data.today_missed"/></div>
+                                <div class="cm-stat-label">Missed</div>
+                            </div>
+                        </div>
+
+                        <div class="cm-slots">
+                            <SlotCard t-foreach="slots" t-as="round" t-key="round.id"
+                                      round="round"
+                                      countdown="countdownFor(round)"
+                                      pending="isPending(round)"
+                                      canRecord="canRecord(round)"
+                                      blockedMessage="blockedMessage(round)"
+                                      onRecord="(r) => this.openRecorder(r)"
+                                      onView="(r) => this.viewRecording(r)"/>
+                        </div>
+                    </t>
+
+                </t>
+            </t>
+
+        </div>
+    </t>
+
+</templates>

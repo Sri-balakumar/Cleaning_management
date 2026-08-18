@@ -38,7 +38,7 @@ export async function isCleaningManager(baseUrl) {
  * needs a token. A browser reads one out of the page; we ask for it.
  */
 export async function getUploadToken(baseUrl) {
-  const result = await rpc(baseUrl, '/cleaning_management/app/token', {});
+  const result = await rpc(baseUrl, '/showroom_check/app/token', {});
   const token = result?.csrf_token;
   if (!token) throw new AppError('server', 'The server did not return an upload token.');
   return token;
@@ -104,7 +104,7 @@ export const deleteRecordings = (baseUrl, ids) =>
   });
 
 export const videoUrl = (baseUrl, recordingId) =>
-  `${baseUrl}/cleaning_management/video/${recordingId}`;
+  `${baseUrl}/showroom_check/video/${recordingId}`;
 
 /** Headers needed to stream a protected video from the player. */
 export function videoHeaders() {
@@ -172,7 +172,7 @@ export function uploadRecording(baseUrl, payload, onProgress) {
 
   return new Promise((resolve, reject) => {
     const request = new XMLHttpRequest();
-    request.open('POST', `${baseUrl}/cleaning_management/upload`);
+    request.open('POST', `${baseUrl}/showroom_check/upload`);
 
     const cookie = getSessionCookie();
     if (Platform.OS !== 'web' && cookie) {

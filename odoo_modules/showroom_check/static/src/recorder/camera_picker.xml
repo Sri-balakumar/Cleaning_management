@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<templates xml:space="preserve">
+
+    <t t-name="showroom_check.CameraPicker">
+        <div class="cm-camera-picker mb-3">
+            <label class="form-label mb-1">Camera</label>
+
+            <div t-if="state.loading" class="text-muted small">
+                Looking for cameras...
+            </div>
+
+            <div t-elif="!state.cameras.length" class="text-muted small">
+                No camera was found on this computer.
+            </div>
+
+            <t t-else="">
+                <div class="d-flex gap-2 align-items-center">
+                    <select class="form-select" t-on-change="onChange"
+                            t-att-disabled="props.disabled">
+                        <option value="">Use the default camera</option>
+                        <option t-foreach="state.cameras" t-as="camera"
+                                t-key="camera.deviceId"
+                                t-att-value="camera.deviceId"
+                                t-att-selected="camera.deviceId === props.selectedId">
+                            <t t-esc="camera.label"/>
+                        </option>
+                    </select>
+                    <button class="btn btn-outline-secondary" title="Look again"
+                            t-on-click="() => this.refresh()"
+                            t-att-disabled="props.disabled">
+                        <i class="fa fa-refresh"/>
+                    </button>
+                </div>
+                <div t-if="state.cameras.length > 1" class="form-text">
+                    This computer has more than one camera. The one you pick is
+                    remembered on this computer only.
+                </div>
+            </t>
+        </div>
+    </t>
+
+</templates>

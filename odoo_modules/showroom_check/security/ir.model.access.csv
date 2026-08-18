@@ -1,0 +1,18 @@
+id,name,model_id:id,group_id:id,perm_read,perm_write,perm_create,perm_unlink
+access_cleaning_config_user,cleaning.config user,model_cleaning_config,showroom_check.group_cleaning_user,1,0,0,0
+access_cleaning_config_manager,cleaning.config manager,model_cleaning_config,showroom_check.group_cleaning_manager,1,1,1,1
+access_cleaning_slot_user,cleaning.slot user,model_cleaning_slot,showroom_check.group_cleaning_user,1,0,0,0
+access_cleaning_slot_manager,cleaning.slot manager,model_cleaning_slot,showroom_check.group_cleaning_manager,1,1,1,1
+access_cleaning_recording_user,cleaning.recording user,model_cleaning_recording,showroom_check.group_cleaning_user,1,0,1,0
+access_cleaning_recording_manager,cleaning.recording manager,model_cleaning_recording,showroom_check.group_cleaning_manager,1,1,1,1
+access_cleaning_slot_missed_manager,cleaning.slot.missed manager,model_cleaning_slot_missed,showroom_check.group_cleaning_manager,1,0,0,0
+access_cleaning_ai_config_user,cleaning.ai.config user,model_cleaning_ai_config,showroom_check.group_cleaning_user,1,0,0,0
+access_cleaning_ai_config_manager,cleaning.ai.config manager,model_cleaning_ai_config,showroom_check.group_cleaning_manager,1,1,1,1
+access_cleaning_ai_check_user,cleaning.ai.check user,model_cleaning_ai_check,showroom_check.group_cleaning_user,1,0,0,0
+access_cleaning_ai_check_manager,cleaning.ai.check manager,model_cleaning_ai_check,showroom_check.group_cleaning_manager,1,1,1,1
+access_cleaning_ai_result_user,cleaning.ai.result user,model_cleaning_ai_result,showroom_check.group_cleaning_user,1,0,0,0
+access_cleaning_ai_result_manager,cleaning.ai.result manager,model_cleaning_ai_result,showroom_check.group_cleaning_manager,1,1,1,1
+access_cleaning_reference_image_user,cleaning.reference.image user,model_cleaning_reference_image,showroom_check.group_cleaning_user,1,0,0,0
+access_cleaning_reference_image_manager,cleaning.reference.image manager,model_cleaning_reference_image,showroom_check.group_cleaning_manager,1,1,1,1
+access_cleaning_recording_shot_user,cleaning.recording.shot user,model_cleaning_recording_shot,showroom_check.group_cleaning_user,1,0,1,0
+access_cleaning_recording_shot_manager,cleaning.recording.shot manager,model_cleaning_recording_shot,showroom_check.group_cleaning_manager,1,1,1,1

@@ -1,0 +1,84 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<templates xml:space="preserve">
+
+    <t t-name="showroom_check.DiagnosticsPanel">
+        <div class="cm-diagnostics">
+            <h6 class="mb-2">
+                <i class="fa fa-stethoscope me-1"/> Recording diagnostics
+            </h6>
+            <p class="text-muted small">
+                Take a screenshot of this panel if recording is not working.
+            </p>
+            <table class="table table-sm cm-diag-table">
+                <tbody>
+                    <tr>
+                        <td>Secure connection (https)</td>
+                        <td>
+                            <span t-att-class="capabilities.secure ? 'text-success' : 'text-danger'">
+                                <t t-esc="capabilities.secure ? 'yes' : 'no'"/>
+                            </span>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td>Address</td>
+                        <td><code><t t-esc="origin"/></code></td>
+                    </tr>
+                    <tr>
+                        <td>Camera interface available</td>
+                        <td><t t-esc="capabilities.hasMediaDevices ? 'yes' : 'no'"/></td>
+                    </tr>
+                    <tr>
+                        <td>Recorder available</td>
+                        <td><t t-esc="capabilities.hasRecorder ? 'yes' : 'no'"/></td>
+                    </tr>
+                    <tr>
+                        <td>Cameras found</td>
+                        <td>
+                            <t t-if="state.cameras.length">
+                                <div t-foreach="state.cameras" t-as="camera" t-key="camera_index">
+                                    <t t-esc="camera"/>
+                                </div>
+                            </t>
+                            <t t-else="">none</t>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td>Camera permission</td>
+                        <td><t t-esc="state.permission"/></td>
+                    </tr>
+                    <tr>
+                        <td>Format that will be used</td>
+                        <td>
+                            <t t-if="resolved">
+                                <code><t t-esc="resolved.mimeType"/></code>
+                                <span t-if="resolved.fellBack" class="text-warning ms-2">
+                                    (fell back from the chosen format)
+                                </span>
+                            </t>
+                            <t t-else="">none available</t>
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+
+            <h6 class="mt-3 mb-1">Formats this browser supports</h6>
+            <table class="table table-sm cm-diag-table">
+                <tbody>
+                    <tr t-foreach="matrixEntries" t-as="entry" t-key="entry[0]">
+                        <td><code><t t-esc="entry[0]"/></code></td>
+                        <td>
+                            <span t-att-class="entry[1] ? 'text-success' : 'text-muted'">
+                                <t t-esc="entry[1] ? 'yes' : 'no'"/>
+                            </span>
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+
+            <div class="small text-muted mt-2">
+                <strong>Browser:</strong> <t t-esc="userAgent"/>
+            </div>
+        </div>
+    </t>
+
+</templates>
