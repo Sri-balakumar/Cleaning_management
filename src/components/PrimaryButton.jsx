@@ -1,0 +1,109 @@
+import React, { useRef } from 'react';
+import { ActivityIndicator, Animated, Pressable, StyleSheet, Text } from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient';
+import { Ionicons } from '@expo/vector-icons';
+import { colors, radius, spacing } from '../theme';
+export function PrimaryButton({
+  label,
+  onPress,
+  loading = false,
+  disabled = false,
+  icon,
+  variant = 'gradient',
+  style,
+}) {
+  const scale = useRef(new Animated.Value(1)).current;
+  const inert = disabled || loading;
+  const press = (to) =>
+    Animated.spring(scale, {
+      toValue: to,
+      useNativeDriver: true,
+      speed: 40,
+      bounciness: 4,
+    }).start();
+  const content = (
+    <>
+      {loading ? (
+        <ActivityIndicator color={variant === 'gradient' ? colors.white : colors.primary} />
+      ) : (
+        <>
+          <Text
+            style={[
+              styles.label,
+              variant !== 'gradient' && styles.labelAlt,
+              variant === 'danger' && styles.labelDanger,
+            ]}
+          >
+            {label}
+          </Text>
+          {icon ? (
+            <Ionicons
+              name={icon}
+              size={18}
+              color={
+                variant === 'gradient'
+                  ? colors.white
+                  : variant === 'danger'
+                    ? colors.danger
+                    : colors.primary
+              }
+              style={styles.icon}
+            />
+          ) : null}
+        </>
+      )}
+    </>
+  );
+  return (
+    <Animated.View style={[{ transform: [{ scale }] }, style]}>
+      <Pressable
+        accessibilityRole="button"
+        accessibilityState={{ disabled: inert, busy: loading }}
+        onPress={onPress}
+        onPressIn={() => !inert && press(0.97)}
+        onPressOut={() => press(1)}
+        disabled={inert}
+        style={inert ? styles.inert : undefined}
+      >
+        {variant === 'gradient' ? (
+          <LinearGradient
+            colors={colors.gradientButton}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 0 }}
+            style={[styles.base, styles.gradient]}
+          >
+            {content}
+          </LinearGradient>
+        ) : (
+          <Animated.View style={[styles.base, variant === 'danger' ? styles.danger : styles.ghost]}>
+            {content}
+          </Animated.View>
+        )}
+      </Pressable>
+    </Animated.View>
+  );
+}
+const styles = StyleSheet.create({
+  base: {
+    height: 54,
+    borderRadius: radius.lg,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: spacing.xl,
+  },
+  gradient: {
+    shadowColor: colors.primary,
+    shadowOpacity: 0.35,
+    shadowRadius: 16,
+    shadowOffset: { width: 0, height: 8 },
+    elevation: 6,
+  },
+  ghost: { backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border },
+  danger: { backgroundColor: colors.dangerBg, borderWidth: 1, borderColor: colors.dangerBorder },
+  inert: { opacity: 0.55 },
+  label: { fontSize: 16, fontWeight: '700', color: colors.white, letterSpacing: 0.2 },
+  labelAlt: { color: colors.primary },
+  labelDanger: { color: colors.danger },
+  icon: { marginLeft: spacing.sm },
+});

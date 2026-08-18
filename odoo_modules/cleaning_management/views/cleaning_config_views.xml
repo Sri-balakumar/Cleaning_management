@@ -1,0 +1,186 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+
+    <record id="view_cleaning_config_form" model="ir.ui.view">
+        <field name="name">cleaning.config.form</field>
+        <field name="model">cleaning.config</field>
+        <field name="arch" type="xml">
+            <form string="Cleaning Recording Settings">
+                <sheet>
+                    <div class="oe_title">
+                        <label for="name" string="Settings"/>
+                        <h1><field name="name" placeholder="Cleaning Recording Settings"/></h1>
+                    </div>
+                    <group>
+                        <group>
+                            <field name="company_id" groups="base.group_multi_company"/>
+                            <field name="active" invisible="1"/>
+                        </group>
+                    </group>
+
+                    <notebook>
+
+                        <page string="Daily Rounds" name="schedule">
+                            <group>
+                                <group>
+                                    <field name="timezone"/>
+                                    <field name="slot_count"/>
+                                </group>
+                            </group>
+                            <div class="text-muted mb-2">
+                                Every time below is read in the office timezone above,
+                                for everyone - so the window opens at the same moment
+                                no matter where the person looking at it is.
+                            </div>
+                            <field name="slot_ids">
+                                <list editable="bottom">
+                                    <field name="sequence" widget="handle"/>
+                                    <field name="name"/>
+                                    <field name="day_period"/>
+                                    <field name="hour_from" widget="float_time"/>
+                                    <field name="hour_to" widget="float_time"/>
+                                    <field name="mon" optional="show"/>
+                                    <field name="tue" optional="show"/>
+                                    <field name="wed" optional="show"/>
+                                    <field name="thu" optional="show"/>
+                                    <field name="fri" optional="show"/>
+                                    <field name="sat" optional="show"/>
+                                    <field name="sun" optional="show"/>
+                                    <field name="note" optional="hide"/>
+                                    <field name="active" widget="boolean_toggle"/>
+                                </list>
+                            </field>
+                            <div class="text-muted mt-2">
+                                A round cannot run past midnight. For a night round from
+                                22:00 to 02:00, add two rounds: 22:00-23:59 and 00:00-02:00.
+                            </div>
+                        </page>
+
+                        <page string="Recording" name="recording">
+                            <!-- Which physical camera is used is remembered per
+                                 computer, not per company, so it cannot be a
+                                 field here. This button is how you get at it. -->
+                            <div class="alert alert-info d-flex align-items-center justify-content-between"
+                                 role="alert">
+                                <span>
+                                    <strong>Choosing the camera.</strong>
+                                    On a computer with more than one camera, pick
+                                    which one to use here. The choice is saved on
+                                    that computer, so each recording station can
+                                    use its own camera.
+                                </span>
+                                <button name="%(cleaning_management.action_cleaning_camera_test)d"
+                                        type="action" class="btn btn-primary ms-3"
+                                        icon="fa-video-camera"
+                                        string="Test / choose camera"/>
+                            </div>
+                            <group>
+                                <group string="Length">
+                                    <label for="duration_value"/>
+                                    <div class="o_row">
+                                        <field name="duration_value" class="oe_inline"/>
+                                        <field name="duration_unit" class="oe_inline"/>
+                                    </div>
+                                    <field name="duration_seconds"/>
+                                </group>
+                                <group string="Picture">
+                                    <field name="video_quality"/>
+                                    <field name="video_format"/>
+                                    <field name="camera_facing"/>
+                                </group>
+                            </group>
+                            <group>
+                                <group string="Storage">
+                                    <field name="estimated_size_mb"/>
+                                    <field name="max_upload_mb"/>
+                                </group>
+                            </group>
+                            <div class="alert alert-info mt-2" role="alert">
+                                <strong>Keep recordings short.</strong>
+                                Thirty to sixty seconds is enough to show who arrived and
+                                when. Long recordings produce very large files that take
+                                too long to upload and get cut off part-way.
+                                No sound is recorded.
+                            </div>
+                        </page>
+
+                        <page string="Who Can Record" name="access">
+                            <group>
+                                <group>
+                                    <field name="allowed_user_mode" widget="radio"/>
+                                </group>
+                            </group>
+                            <field name="allowed_user_ids" widget="many2many_tags"
+                                   invisible="allowed_user_mode != 'list'"
+                                   options="{'no_create': True}"/>
+                            <div class="text-muted mt-2">
+                                People also need the Cleaning Management
+                                <strong>User</strong> role, which is set per person under
+                                Settings &#8594; Users.
+                            </div>
+                            <group string="Advanced">
+                                <field name="upload_grace_seconds"/>
+                            </group>
+                        </page>
+
+                        <page string="Keeping Recordings" name="retention">
+                            <group>
+                                <group>
+                                    <label for="retention_number"/>
+                                    <div class="o_row">
+                                        <field name="retention_number" class="oe_inline"/>
+                                        <field name="retention_unit" class="oe_inline"/>
+                                    </div>
+                                    <field name="retention_mode"/>
+                                </group>
+                            </group>
+                            <div class="alert alert-warning mt-2" role="alert">
+                                Set the number to <strong>0</strong> to keep recordings
+                                forever.
+                                <br/>
+                                Disk space does not go up the moment a recording is
+                                deleted. Odoo marks the file and removes it during a
+                                later clean-up, usually within a day.
+                            </div>
+                        </page>
+
+                    </notebook>
+                </sheet>
+            </form>
+        </field>
+    </record>
+
+    <record id="view_cleaning_config_list" model="ir.ui.view">
+        <field name="name">cleaning.config.list</field>
+        <field name="model">cleaning.config</field>
+        <field name="arch" type="xml">
+            <list string="Cleaning Settings">
+                <field name="name"/>
+                <field name="company_id" groups="base.group_multi_company"/>
+                <field name="timezone"/>
+                <field name="slot_count"/>
+                <field name="duration_seconds"/>
+                <field name="video_quality"/>
+                <field name="retention_number"/>
+                <field name="retention_unit"/>
+            </list>
+        </field>
+    </record>
+
+    <record id="action_cleaning_config" model="ir.actions.act_window">
+        <field name="name">Cleaning Recording Settings</field>
+        <field name="res_model">cleaning.config</field>
+        <field name="view_mode">list,form</field>
+    </record>
+
+    <!-- The menu has to land on THE settings record, not a list containing one
+         row. A menu item cannot work out a record id in XML, so it points at
+         this instead. -->
+    <record id="action_cleaning_config_open" model="ir.actions.server">
+        <field name="name">Settings</field>
+        <field name="model_id" ref="model_cleaning_config"/>
+        <field name="state">code</field>
+        <field name="code">action = model.action_open_settings()</field>
+    </record>
+
+</odoo>

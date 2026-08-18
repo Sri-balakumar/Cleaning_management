@@ -1,0 +1,240 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<templates xml:space="preserve">
+
+    <t t-name="cleaning_management.RecorderDialog">
+        <Dialog title="title" size="'lg'" contentClass="'cm-recorder-dialog'">
+
+            <!-- Camera is opening -->
+            <div t-if="state.phase === 'requesting_camera'" class="text-center py-5">
+                <div class="spinner-border text-primary mb-3" role="status"/>
+                <h5>Waiting for the camera</h5>
+                <p class="text-muted mb-0">
+                    Your browser is asking for permission to use the camera.
+                    Click <strong>Allow</strong> when the message appears near the
+                    top of the window.
+                </p>
+            </div>
+
+            <!-- Camera could not start -->
+            <div t-if="['camera_denied', 'camera_missing', 'camera_busy'].includes(state.phase)"
+                 class="text-center py-4">
+                <div class="cm-big-icon text-danger mb-3">
+                    <i class="fa fa-video-camera"/>
+                    <i class="fa fa-ban cm-overlay-ban"/>
+                </div>
+                <h5>The camera could not be started</h5>
+                <p class="text-muted"><t t-esc="state.error"/></p>
+            </div>
+
+            <CameraPicker t-if="showsPicker"
+                          selectedId="state.selectedDeviceId"
+                          onSelect="(camera) => this.selectCamera(camera)"
+                          disabled="isBusy"/>
+
+            <!--
+                Preview and recording share ONE video element on purpose. Two
+                separate ones would mean the element is replaced the moment
+                recording starts, taking the live camera feed with it and
+                leaving a black rectangle for the whole recording.
+            -->
+            <div t-if="showsCamera">
+                <div class="cm-video-wrap mb-3">
+                    <video t-ref="preview" autoplay="true" muted="true" playsinline="true"
+                           class="cm-video"/>
+                    <div t-if="state.phase === 'recording'" class="cm-rec-badge">
+                        <span class="cm-rec-dot"/> REC
+                    </div>
+                </div>
+            </div>
+
+            <!-- Test mode: the verdict, instead of anything about recording -->
+            <div t-if="testPassed">
+                <div class="alert alert-success py-2 mb-3" role="alert">
+                    <i class="fa fa-check-circle me-1"/>
+                    <strong>The camera is working.</strong>
+                    Nothing has been recorded or saved.
+                </div>
+                <table class="table table-sm mb-0">
+                    <tbody>
+                        <tr>
+                            <td class="text-muted">Picture size</td>
+                            <td>
+                                <t t-esc="resolutionLabel"/>
+                                <span t-if="!resolutionMatches" class="text-muted ms-2">
+                                    (asked for <t t-esc="requestedResolutionLabel"/> -
+                                    this camera cannot go that high, which is fine)
+                                </span>
+                            </td>
+                        </tr>
+                        <tr>
+                            <td class="text-muted">Recording format</td>
+                            <td>
+                                <code><t t-esc="formatLabel"/></code>
+                                <span t-if="state.fellBack" class="text-warning ms-2">
+                                    (fell back from the format in the settings)
+                                </span>
+                            </td>
+                        </tr>
+                        <tr>
+                            <td class="text-muted">Each recording will be about</td>
+                            <td>
+                                <t t-esc="estimateLabel"/>
+                                for <t t-esc="formatDuration(props.settings.duration_seconds)"/>
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <!-- Ready to record -->
+            <div t-elif="state.phase === 'preview_ready'">
+                <div t-if="state.fellBack" class="alert alert-info py-2" role="alert">
+                    <i class="fa fa-info-circle me-1"/>
+                    This browser cannot record in the format that was chosen, so
+                    the recording will be saved as WebM instead. It will still
+                    play normally.
+                </div>
+                <p class="mb-0">
+                    You are on camera. Recording will last
+                    <strong><t t-esc="formatDuration(props.settings.duration_seconds)"/></strong>
+                    and produce a file of about
+                    <strong><t t-esc="estimateLabel"/></strong>.
+                </p>
+                <p t-if="props.slot and props.slot.note" class="text-muted mt-2 mb-0">
+                    <i class="fa fa-sticky-note-o me-1"/><t t-esc="props.slot.note"/>
+                </p>
+            </div>
+
+            <!-- Recording -->
+            <div t-if="state.phase === 'recording' || state.phase === 'stopping'">
+                <div class="d-flex align-items-center justify-content-between mb-2">
+                    <!-- A plain whole number, counting down once a second.
+                         aria-live is "off" here because announcing every single
+                         tick would talk over a screen reader continuously; the
+                         phase changes around it are what get announced. -->
+                    <div class="cm-countdown-wrap">
+                        <div class="cm-countdown" aria-live="off">
+                            <t t-esc="secondsLeft"/>
+                        </div>
+                        <div class="cm-countdown-caption">seconds left</div>
+                    </div>
+                    <div class="text-muted">
+                        <t t-esc="formatBytes(state.bytes)"/> of about
+                        <t t-esc="estimateLabel"/>
+                    </div>
+                </div>
+                <div class="progress" style="height: 6px;">
+                    <div class="progress-bar bg-danger"
+                         t-att-style="'width: ' + Math.min(100, (state.elapsed / props.settings.duration_seconds) * 100) + '%'"/>
+                </div>
+                <p t-if="state.phase === 'stopping'" class="text-muted mt-3 mb-0">
+                    Finishing the recording...
+                </p>
+                <p t-if="state.wasHidden" class="text-muted mt-2 mb-0 small">
+                    <i class="fa fa-info-circle me-1"/>
+                    Recording continues while you are on another tab.
+                </p>
+            </div>
+
+            <!-- Uploading -->
+            <div t-if="state.phase === 'uploading' || state.phase === 'processing'"
+                 class="py-3">
+                <h5 t-if="state.phase === 'uploading'">Uploading your recording</h5>
+                <h5 t-else="">Saving on the server</h5>
+                <div class="progress my-3" style="height: 10px;">
+                    <div t-if="state.phase === 'uploading'" class="progress-bar"
+                         t-att-style="'width: ' + state.progress + '%'"/>
+                    <div t-else=""
+                         class="progress-bar progress-bar-striped progress-bar-animated"
+                         style="width: 100%"/>
+                </div>
+                <p t-if="state.phase === 'uploading'" class="text-muted mb-1">
+                    <t t-esc="formatBytes(state.loaded)"/> of
+                    <t t-esc="formatBytes(state.total)"/>
+                    (<t t-esc="state.progress"/>%)
+                </p>
+                <p t-else="" class="text-muted mb-1">
+                    Everything has been sent. The server is storing it now.
+                </p>
+                <p class="text-muted mb-0 small">
+                    <i class="fa fa-exclamation-triangle me-1"/>
+                    Please keep this window open until it finishes.
+                </p>
+            </div>
+
+            <!-- Saved -->
+            <div t-if="state.phase === 'success'" class="text-center py-4">
+                <div class="cm-big-icon text-success mb-3">
+                    <i class="fa fa-check-circle"/>
+                </div>
+                <h5>Recording saved</h5>
+                <p class="text-muted mb-0">
+                    <t t-esc="props.slot.name"/> has been recorded for today.
+                </p>
+                <div t-if="state.truncated" class="alert alert-warning mt-3 mb-0"
+                     role="alert">
+                    The recording stopped early because it reached the maximum
+                    file size. What was recorded up to that point has been saved.
+                </div>
+            </div>
+
+            <!-- Upload failed -->
+            <div t-if="state.phase === 'failed_upload' || state.phase === 'failed_rejected'"
+                 class="py-3">
+                <div class="alert alert-danger" role="alert">
+                    <h6 class="alert-heading">
+                        <i class="fa fa-exclamation-circle me-1"/>
+                        The recording was not saved
+                    </h6>
+                    <p class="mb-0"><t t-esc="state.error"/></p>
+                </div>
+                <p t-if="state.phase === 'failed_upload'" class="mb-0">
+                    <strong>Your recording has not been lost.</strong>
+                    Try again, or save it to this computer and send it to your
+                    administrator. Do not close this window until you have done
+                    one or the other.
+                </p>
+                <p t-else="" class="mb-0">
+                    This round has not been recorded. You can still save the
+                    video to this computer if you need it.
+                </p>
+            </div>
+
+            <t t-set-slot="footer">
+                <!-- No Start button in test mode: a test must never be able to
+                     use up the round's one real recording. -->
+                <button t-if="state.phase === 'preview_ready' and !props.testMode"
+                        class="btn btn-primary btn-lg" t-on-click="() => this.startRecording()">
+                    <i class="fa fa-circle text-danger me-1"/> Start recording
+                </button>
+                <button t-if="state.phase === 'recording'"
+                        class="btn btn-secondary" t-on-click="() => this.stopEarly()">
+                    Stop now
+                </button>
+                <button t-if="state.phase === 'uploading' || state.phase === 'processing'"
+                        class="btn btn-secondary" t-on-click="() => this.cancelUpload()">
+                    Cancel upload
+                </button>
+                <button t-if="state.retryable and state.phase === 'failed_upload'"
+                        class="btn btn-primary" t-on-click="() => this.retryUpload()">
+                    <i class="fa fa-repeat me-1"/> Try again
+                </button>
+                <button t-if="['failed_upload', 'failed_rejected'].includes(state.phase)"
+                        class="btn btn-secondary" t-on-click="() => this.downloadClip()">
+                    <i class="fa fa-download me-1"/> Save video to this computer
+                </button>
+                <button t-if="['camera_denied', 'camera_busy'].includes(state.phase)"
+                        class="btn btn-primary" t-on-click="() => this.retryCamera()">
+                    Try again
+                </button>
+                <button t-if="!isBusy" class="btn btn-secondary"
+                        t-on-click="() => this.props.close()">
+                    <t t-if="props.testMode or state.phase === 'success'">Close</t>
+                    <t t-else="">Cancel</t>
+                </button>
+            </t>
+
+        </Dialog>
+    </t>
+
+</templates>

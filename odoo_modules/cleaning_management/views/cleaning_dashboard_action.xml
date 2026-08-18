@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+
+    <!-- The `tag` here must match the name the dashboard registers itself
+         under in static/src/dashboard/cleaning_dashboard.js. -->
+    <record id="action_cleaning_dashboard" model="ir.actions.client">
+        <field name="name">Cleaning</field>
+        <field name="tag">cleaning_dashboard</field>
+    </record>
+
+    <!-- Opens the camera on its own, so the Settings form can offer it too.
+         Which camera to use is remembered per computer, so it cannot be a
+         field on this company-wide form - a button is the honest way to
+         expose it. -->
+    <record id="action_cleaning_camera_test" model="ir.actions.client">
+        <field name="name">Test camera</field>
+        <field name="tag">cleaning_camera_test</field>
+        <field name="target">new</field>
+    </record>
+
+</odoo>

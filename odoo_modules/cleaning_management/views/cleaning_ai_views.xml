@@ -1,0 +1,119 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+
+    <record id="view_cleaning_ai_config_form" model="ir.ui.view">
+        <field name="name">cleaning.ai.config.form</field>
+        <field name="model">cleaning.ai.config</field>
+        <field name="arch" type="xml">
+            <form string="AI Review Settings">
+                <header>
+                    <button name="action_test_connection" type="object"
+                            string="Test connection" class="btn-primary"
+                            icon="fa-plug"/>
+                </header>
+                <sheet>
+                    <div class="oe_title">
+                        <label for="name" string="AI Review"/>
+                        <h1><field name="name"/></h1>
+                    </div>
+
+                    <div class="alert alert-info" role="alert">
+                        <strong>The AI gives a second opinion, not a verdict.</strong>
+                        Judging cleanliness from a few pictures is a matter of opinion,
+                        and it will sometimes be wrong - a tidy room in poor light can
+                        look dirty, and a shiny floor can hide dust. Use it to spot
+                        rounds worth looking at yourself. Nothing is ever rejected
+                        automatically, and a person always has the final say.
+                    </div>
+
+                    <group>
+                        <group>
+                            <field name="enabled" widget="boolean_toggle"/>
+                            <field name="company_id" groups="base.group_multi_company"/>
+                        </group>
+                    </group>
+
+                    <group string="Where The AI Runs" invisible="not enabled">
+                        <group>
+                            <field name="provider" widget="radio"/>
+                            <field name="base_url"
+                                   placeholder="http://localhost:11434"
+                                   invisible="provider == 'gemini'"
+                                   required="provider != 'gemini'"/>
+                            <field name="api_key" password="True"
+                                   groups="base.group_system"
+                                   placeholder="Paste your key here"/>
+                            <field name="model" placeholder="gemini-2.5-flash"/>
+                        </group>
+                        <group>
+                            <field name="frames_per_recording"/>
+                            <field name="timeout_seconds"/>
+                            <field name="max_output_tokens"/>
+                        </group>
+                    </group>
+
+                    <div class="alert alert-warning" role="alert"
+                         invisible="not enabled or provider != 'gemini'">
+                        <i class="fa fa-cloud-upload me-1"/>
+                        With Gemini, pictures of your office - and anyone in them - are
+                        sent to Google. If that is a problem, choose Ollama instead and
+                        the pictures never leave your network.
+                    </div>
+
+                    <notebook invisible="not enabled">
+                        <page string="What To Check" name="checks">
+                            <div class="text-muted mb-2">
+                                Each line is judged separately. Being specific about
+                                what a pass looks like gives far steadier answers than
+                                a vague one.
+                            </div>
+                            <field name="check_ids">
+                                <list editable="bottom">
+                                    <field name="sequence" widget="handle"/>
+                                    <field name="name"/>
+                                    <field name="description"/>
+                                    <field name="weight" optional="hide"/>
+                                    <field name="active" widget="boolean_toggle"/>
+                                </list>
+                            </field>
+                        </page>
+                        <page string="Extra Instructions" name="extra">
+                            <field name="extra_instructions" nolabel="1"
+                                   placeholder="e.g. The store room floor is permanently stained - ignore that. Chairs do not need to be tucked in."/>
+                        </page>
+                    </notebook>
+                </sheet>
+            </form>
+        </field>
+    </record>
+
+    <record id="view_cleaning_ai_config_list" model="ir.ui.view">
+        <field name="name">cleaning.ai.config.list</field>
+        <field name="model">cleaning.ai.config</field>
+        <field name="arch" type="xml">
+            <list string="AI Review Settings">
+                <field name="name"/>
+                <field name="company_id" groups="base.group_multi_company"/>
+                <field name="provider"/>
+                <field name="model"/>
+                <field name="enabled" widget="boolean_toggle"/>
+            </list>
+        </field>
+    </record>
+
+    <record id="action_cleaning_ai_config" model="ir.actions.act_window">
+        <field name="name">AI Review</field>
+        <field name="res_model">cleaning.ai.config</field>
+        <field name="view_mode">list,form</field>
+    </record>
+
+    <!-- Opens the single record rather than a list of one, and creates it with
+         a starter checklist the first time. -->
+    <record id="action_cleaning_ai_config_open" model="ir.actions.server">
+        <field name="name">AI Review</field>
+        <field name="model_id" ref="model_cleaning_ai_config"/>
+        <field name="state">code</field>
+        <field name="code">action = model.action_open_settings()</field>
+    </record>
+
+</odoo>

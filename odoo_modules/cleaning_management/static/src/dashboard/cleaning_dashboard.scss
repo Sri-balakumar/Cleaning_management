@@ -1,0 +1,285 @@
+// Colours come from Bootstrap variables rather than fixed values, so the page
+// follows whatever backend theme is in use instead of fighting it.
+
+.cm-dashboard {
+    padding: 1.5rem;
+    height: 100%;
+    overflow: auto;
+
+    .cm-header {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        flex-wrap: wrap;
+        gap: 1rem;
+        margin-bottom: 1.5rem;
+    }
+
+    .cm-title {
+        margin: 0;
+        font-weight: 600;
+    }
+
+    .cm-header-actions {
+        display: flex;
+        gap: .5rem;
+        flex-wrap: wrap;
+    }
+
+    // --- Today at a glance ------------------------------------------------
+    .cm-summary {
+        display: flex;
+        gap: 1rem;
+        flex-wrap: wrap;
+        margin-bottom: 1.5rem;
+    }
+
+    .cm-stat {
+        flex: 0 0 auto;
+        min-width: 7rem;
+        padding: .75rem 1.25rem;
+        border: 1px solid var(--border-color, #dee2e6);
+        border-radius: .5rem;
+        text-align: center;
+
+        &.cm-stat-bad .cm-stat-value {
+            color: var(--bs-danger, #dc3545);
+        }
+    }
+
+    .cm-stat-value {
+        font-size: 1.75rem;
+        font-weight: 600;
+        line-height: 1.1;
+    }
+
+    .cm-stat-label {
+        font-size: .8125rem;
+        opacity: .7;
+    }
+
+    // --- The rounds -------------------------------------------------------
+    .cm-slots {
+        display: grid;
+        // Cards reflow on a tablet or a narrow window without a media query.
+        grid-template-columns: repeat(auto-fill, minmax(17rem, 1fr));
+        gap: 1rem;
+    }
+
+    .cm-slot-card {
+        border: 1px solid var(--border-color, #dee2e6);
+        border-left-width: 4px;
+        border-radius: .5rem;
+        padding: 1rem;
+        background: var(--bs-body-bg, #fff);
+
+        &.cm-slot-open {
+            border-left-color: var(--bs-primary, #714b67);
+            box-shadow: 0 .125rem .5rem rgba(0, 0, 0, .08);
+        }
+        &.cm-slot-done {
+            border-left-color: var(--bs-success, #198754);
+        }
+        &.cm-slot-missed {
+            border-left-color: var(--bs-danger, #dc3545);
+        }
+        &.cm-slot-upcoming,
+        &.cm-slot-pending {
+            border-left-color: var(--bs-secondary, #adb5bd);
+        }
+    }
+
+    .cm-slot-head {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: .5rem;
+    }
+
+    .cm-slot-name {
+        font-weight: 600;
+        font-size: 1.0625rem;
+    }
+
+    .cm-slot-window {
+        font-size: .875rem;
+        opacity: .7;
+    }
+
+    .cm-slot-status {
+        font-size: .75rem;
+        text-transform: uppercase;
+        letter-spacing: .03em;
+        opacity: .6;
+        white-space: nowrap;
+    }
+
+    .cm-slot-body {
+        margin-top: .75rem;
+    }
+
+    .cm-slot-line {
+        font-size: .9375rem;
+    }
+
+    // --- Blocking messages ------------------------------------------------
+    .cm-blocker,
+    .cm-empty {
+        border: 1px solid var(--border-color, #dee2e6);
+        border-radius: .5rem;
+        padding: 2rem;
+        text-align: center;
+        max-width: 40rem;
+        margin: 0 auto 1.5rem;
+    }
+
+    .cm-blocker-icon {
+        font-size: 2.5rem;
+        line-height: 1;
+        margin-bottom: .75rem;
+    }
+
+    // --- Diagnostics ------------------------------------------------------
+    .cm-diagnostics {
+        border: 1px dashed var(--border-color, #dee2e6);
+        border-radius: .5rem;
+        padding: 1rem;
+        margin-bottom: 1.5rem;
+
+        .cm-diag-table {
+            // Long mime types and user agent strings must not stretch the page.
+            table-layout: fixed;
+            word-break: break-all;
+        }
+    }
+}
+
+// --- The recorder dialog --------------------------------------------------
+.cm-recorder-dialog {
+    .cm-video-wrap {
+        position: relative;
+        background: #000;
+        border-radius: .5rem;
+        overflow: hidden;
+    }
+
+    .cm-video {
+        width: 100%;
+        max-height: 22rem;
+        display: block;
+        object-fit: contain;
+        // Mirrored, because a preview that moves the opposite way to the person
+        // in front of it is disorienting.
+        transform: scaleX(-1);
+    }
+
+    .cm-rec-badge {
+        position: absolute;
+        top: .75rem;
+        left: .75rem;
+        display: flex;
+        align-items: center;
+        gap: .375rem;
+        padding: .25rem .625rem;
+        border-radius: 1rem;
+        background: rgba(0, 0, 0, .6);
+        color: #fff;
+        font-size: .75rem;
+        font-weight: 600;
+        letter-spacing: .05em;
+    }
+
+    .cm-rec-dot {
+        width: .5rem;
+        height: .5rem;
+        border-radius: 50%;
+        background: #dc3545;
+        animation: cm-rec-pulse 1.2s ease-in-out infinite;
+    }
+
+    .cm-countdown-wrap {
+        text-align: center;
+        min-width: 5rem;
+    }
+
+    .cm-countdown {
+        font-size: 3.25rem;
+        font-weight: 700;
+        // Fixed-width digits, so the number does not shuffle sideways as it
+        // ticks from 10 down to 9.
+        font-variant-numeric: tabular-nums;
+        line-height: 1;
+        color: var(--bs-danger, #dc3545);
+    }
+
+    .cm-countdown-caption {
+        font-size: .75rem;
+        text-transform: uppercase;
+        letter-spacing: .06em;
+        opacity: .6;
+        margin-top: .125rem;
+    }
+
+    .cm-camera-picker {
+        .form-select {
+            // Long camera names must not stretch the dialog.
+            max-width: 100%;
+            text-overflow: ellipsis;
+        }
+    }
+
+    .cm-big-icon {
+        position: relative;
+        display: inline-block;
+        font-size: 3rem;
+        line-height: 1;
+
+        .cm-overlay-ban {
+            position: absolute;
+            left: 0;
+            top: 0;
+            opacity: .55;
+        }
+    }
+}
+
+@keyframes cm-rec-pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: .25; }
+}
+
+// Anyone who has asked for less movement gets a steady dot instead.
+@media (prefers-reduced-motion: reduce) {
+    .cm-recorder-dialog .cm-rec-dot {
+        animation: none;
+    }
+}
+
+// --- The player on the recording form -------------------------------------
+.cm-player {
+    margin-bottom: 1rem;
+
+    .cm-player-frame {
+        background: #000;
+        border-radius: .5rem;
+        overflow: hidden;
+        // Capped so a 1080p clip does not push the rest of the form off screen,
+        // and full width so it still fills a narrow window.
+        max-width: 44rem;
+    }
+
+    .cm-player-video {
+        display: block;
+        width: 100%;
+        max-height: 60vh;
+        // NOT mirrored, unlike the live preview: this is footage being
+        // reviewed, and flipping it would put the room the wrong way round.
+    }
+
+    .cm-player-empty {
+        border: 1px dashed var(--border-color, #dee2e6);
+        border-radius: .5rem;
+        padding: 1rem;
+        max-width: 44rem;
+    }
+}

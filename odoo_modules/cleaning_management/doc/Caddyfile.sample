@@ -1,0 +1,96 @@
+# Caddyfile for Odoo 19 + Cleaning Management
+#
+# Copy this to C:\Caddy\Caddyfile, change the host name on the first line, then
+# run Caddy. Remember to set proxy_mode = True in odoo.conf and restart Odoo.
+#
+# Host name options:
+#   odoo.example.com   a real DNS name reachable from the internet - Caddy
+#                      fetches a genuine certificate automatically, and nothing
+#                      needs to be trusted on the client computers
+#   odoo.local         a local name - Caddy issues its own certificate, which
+#                      each computer has to trust once
+#   10.96.160.80       the bare IP also works, but every browser will warn about
+#                      the certificate until it is trusted
+
+odoo.local {
+
+	# Caddy's own certificate authority. Drop this line if the host name above
+	# is a real internet-facing DNS name.
+	tls internal
+
+	encode gzip zstd
+
+	# ------------------------------------------------------------------
+	# Uploads
+	# ------------------------------------------------------------------
+	# THE important setting for this module.
+	#
+	# By default Caddy streams the request body straight through, so a cleaner
+	# uploading a recording over poor Wi-Fi holds an Odoo worker busy for the
+	# whole transfer - and Odoo gives up on any request lasting more than
+	# limit_time_real (120 seconds), losing the recording.
+	#
+	# Buffering means Caddy accepts the upload at the client's pace and then
+	# hands Odoo the finished file in one quick go.
+	#
+	# Keep this at or above the Maximum Upload Size set in the Cleaning
+	# settings.
+	request_body {
+		max_size 300MB
+	}
+
+	# ------------------------------------------------------------------
+	# Long-polling / websocket channel
+	# ------------------------------------------------------------------
+	# Odoo serves its live-update channel from a separate port (gevent_port in
+	# odoo.conf, 8072 by default). Sending it to the main port instead causes
+	# chat and live notifications to stop working.
+	@longpolling path /websocket /longpolling/*
+	handle @longpolling {
+		reverse_proxy 127.0.0.1:8072 {
+			header_up Host {host}
+			header_up X-Forwarded-Host {host}
+			header_up X-Forwarded-Proto {scheme}
+			header_up X-Real-IP {remote_host}
+		}
+	}
+
+	# ------------------------------------------------------------------
+	# Everything else
+	# ------------------------------------------------------------------
+	handle {
+		reverse_proxy 127.0.0.1:8069 {
+			header_up Host {host}
+			header_up X-Forwarded-Host {host}
+			header_up X-Forwarded-Proto {scheme}
+			header_up X-Real-IP {remote_host}
+
+			# Generous, because a large upload legitimately takes a while.
+			transport http {
+				read_timeout 600s
+				write_timeout 600s
+			}
+		}
+	}
+
+	header {
+		# Tells browsers to keep using https for this site.
+		Strict-Transport-Security "max-age=31536000"
+		X-Content-Type-Options "nosniff"
+		# Not "DENY": Odoo embeds its own pages in frames in several places.
+		X-Frame-Options "SAMEORIGIN"
+	}
+
+	log {
+		output file C:\Caddy\logs\odoo-access.log {
+			roll_size 20MB
+			roll_keep 10
+		}
+	}
+}
+
+# Send plain http to https, so an old bookmark still lands somewhere the camera
+# is allowed to work.
+http://odoo.local {
+	redir https://{host}{uri} permanent
+}

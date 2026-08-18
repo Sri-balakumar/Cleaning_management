@@ -1,0 +1,96 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+
+    <record id="view_cleaning_slot_list" model="ir.ui.view">
+        <field name="name">cleaning.slot.list</field>
+        <field name="model">cleaning.slot</field>
+        <field name="arch" type="xml">
+            <list string="Cleaning Rounds">
+                <field name="sequence" widget="handle"/>
+                <field name="name"/>
+                <field name="day_period"/>
+                <field name="hour_from" widget="float_time"/>
+                <field name="hour_to" widget="float_time"/>
+                <field name="days_display"/>
+                <field name="company_id" groups="base.group_multi_company" optional="hide"/>
+                <field name="active" widget="boolean_toggle"/>
+            </list>
+        </field>
+    </record>
+
+    <record id="view_cleaning_slot_form" model="ir.ui.view">
+        <field name="name">cleaning.slot.form</field>
+        <field name="model">cleaning.slot</field>
+        <field name="arch" type="xml">
+            <form string="Cleaning Round">
+                <sheet>
+                    <widget name="web_ribbon" title="Archived" bg_color="text-bg-danger"
+                            invisible="active"/>
+                    <div class="oe_title">
+                        <label for="name" string="Round"/>
+                        <h1><field name="name" placeholder="e.g. Morning Round"/></h1>
+                    </div>
+                    <group>
+                        <group string="When">
+                            <field name="config_id" options="{'no_create': True}"/>
+                            <field name="day_period"/>
+                            <field name="hour_from" widget="float_time"/>
+                            <field name="hour_to" widget="float_time"/>
+                            <field name="duration_minutes"/>
+                        </group>
+                        <group string="Days">
+                            <field name="mon"/>
+                            <field name="tue"/>
+                            <field name="wed"/>
+                            <field name="thu"/>
+                            <field name="fri"/>
+                            <field name="sat"/>
+                            <field name="sun"/>
+                        </group>
+                    </group>
+                    <group>
+                        <field name="sequence"/>
+                        <field name="active"/>
+                    </group>
+                    <group string="Instructions">
+                        <field name="note" nolabel="1"
+                               placeholder="Shown on the dashboard while this round is open, e.g. Include the pantry and both washrooms."/>
+                    </group>
+                </sheet>
+            </form>
+        </field>
+    </record>
+
+    <record id="view_cleaning_slot_search" model="ir.ui.view">
+        <field name="name">cleaning.slot.search</field>
+        <field name="model">cleaning.slot</field>
+        <field name="arch" type="xml">
+            <search string="Cleaning Rounds">
+                <field name="name"/>
+                <field name="day_period"/>
+                <filter name="filter_active" string="Active" domain="[('active', '=', True)]"/>
+                <filter name="filter_archived" string="Archived" domain="[('active', '=', False)]"/>
+                <!-- A bare <group> is the only form Odoo 19's view schema
+                     accepts here; expand= and string= are both rejected. -->
+                <group>
+                    <filter name="group_period" string="Period" context="{'group_by': 'day_period'}"/>
+                </group>
+            </search>
+        </field>
+    </record>
+
+    <record id="action_cleaning_slot" model="ir.actions.act_window">
+        <field name="name">Cleaning Rounds</field>
+        <field name="res_model">cleaning.slot</field>
+        <field name="view_mode">list,form</field>
+        <field name="help" type="html">
+            <p class="o_view_nocontent_smiling_face">Set up your first cleaning round</p>
+            <p>
+                A round is one visit with a time window, for example a morning
+                round from 09:00 to 10:00. The Record button on the dashboard
+                only works while a round's window is open.
+            </p>
+        </field>
+    </record>
+
+</odoo>

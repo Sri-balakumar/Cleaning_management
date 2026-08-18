@@ -1,0 +1,72 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+
+    <!--
+        The root menu carries an action of its own on purpose. Without one,
+        Odoo promotes whichever child happens to be visible first, so the page
+        people land on would change depending on their role.
+    -->
+    <menuitem id="menu_cleaning_root"
+              name="Cleaning"
+              web_icon="cleaning_management,static/description/icon.png"
+              action="cleaning_management.action_cleaning_dashboard"
+              groups="cleaning_management.group_cleaning_user"
+              sequence="85"/>
+
+    <menuitem id="menu_cleaning_dashboard"
+              name="Record"
+              parent="menu_cleaning_root"
+              action="cleaning_management.action_cleaning_dashboard"
+              groups="cleaning_management.group_cleaning_user"
+              sequence="5"/>
+
+    <menuitem id="menu_cleaning_recordings"
+              name="Recordings"
+              parent="menu_cleaning_root"
+              action="cleaning_management.action_cleaning_recording"
+              groups="cleaning_management.group_cleaning_user"
+              sequence="10"/>
+
+    <!-- No groups= on the section headings. Each child carries its own, and
+         Odoo already hides a heading whose children are all hidden. Putting a
+         group on the heading is how a whole section disappears for somebody
+         who should see part of it. -->
+    <menuitem id="menu_cleaning_reporting"
+              name="Reporting"
+              parent="menu_cleaning_root"
+              sequence="20"/>
+
+    <menuitem id="menu_cleaning_missed"
+              name="Missed Rounds"
+              parent="menu_cleaning_reporting"
+              action="cleaning_management.action_cleaning_slot_missed"
+              groups="cleaning_management.group_cleaning_manager"
+              sequence="10"/>
+
+    <menuitem id="menu_cleaning_configuration"
+              name="Configuration"
+              parent="menu_cleaning_root"
+              sequence="30"/>
+
+    <menuitem id="menu_cleaning_settings"
+              name="Settings"
+              parent="menu_cleaning_configuration"
+              action="cleaning_management.action_cleaning_config_open"
+              groups="cleaning_management.group_cleaning_manager"
+              sequence="10"/>
+
+    <menuitem id="menu_cleaning_ai"
+              name="AI Review"
+              parent="menu_cleaning_configuration"
+              action="cleaning_management.action_cleaning_ai_config_open"
+              groups="cleaning_management.group_cleaning_manager"
+              sequence="30"/>
+
+    <menuitem id="menu_cleaning_slots"
+              name="Cleaning Rounds"
+              parent="menu_cleaning_configuration"
+              action="cleaning_management.action_cleaning_slot"
+              groups="cleaning_management.group_cleaning_manager"
+              sequence="20"/>
+
+</odoo>

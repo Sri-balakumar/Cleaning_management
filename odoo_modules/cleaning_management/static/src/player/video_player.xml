@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<templates xml:space="preserve">
+
+    <t t-name="cleaning_management.VideoPlayer">
+        <div class="cm-player">
+
+            <div t-if="hasVideo" class="cm-player-frame">
+                <!-- t-att-src rather than a hardcoded src so the player follows
+                     the record when moving between recordings with the pager. -->
+                <video class="cm-player-video" controls="controls"
+                       preload="metadata" t-att-src="videoUrl"
+                       t-key="recordId"/>
+            </div>
+
+            <div t-else="" class="cm-player-empty text-muted">
+                <i class="fa fa-video-camera me-2"/>
+                <t t-if="recordId">
+                    The video for this round is no longer stored. Recordings are
+                    removed automatically once they pass the age set under
+                    Keeping Recordings; the entry itself is kept.
+                </t>
+                <t t-else="">
+                    Save this record to see the video.
+                </t>
+            </div>
+
+        </div>
+    </t>
+
+</templates>
