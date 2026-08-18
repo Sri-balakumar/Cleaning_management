@@ -18,6 +18,16 @@
                         </group>
                     </group>
 
+                    <div class="alert alert-light border mb-3" role="status">
+                        <strong>What to set up, in this order:</strong>
+                        <ol class="mb-0 ps-3">
+                            <li><strong>Daily Rounds</strong> - your timezone, and the times cleaning happens each day.</li>
+                            <li><strong>Recording</strong> - how long each clip runs, and how sharp it is.</li>
+                            <li><strong>Who Can Record</strong> - which people are allowed to send a clip.</li>
+                            <li><strong>Keeping Recordings</strong> - how long clips are kept before they are removed.</li>
+                        </ol>
+                    </div>
+
                     <notebook>
 
                         <page string="Daily Rounds" name="schedule">
@@ -139,8 +149,8 @@
                                 forever.
                                 <br/>
                                 Disk space does not go up the moment a recording is
-                                deleted. Odoo marks the file and removes it during a
-                                later clean-up, usually within a day.
+                                deleted. The file is marked, then removed during a later
+                                clean-up, usually within a day.
                             </div>
                         </page>
 

@@ -220,7 +220,7 @@ class CleaningConfig(models.Model):
              "also makes that day show up as a MISSED round in the report, "
              "which is misleading.\n\n"
              "Note: free disk space does not go up at the moment of deletion. "
-             "Odoo marks the file and removes it on a later cleanup pass.")
+             "The file is marked, then removed on a later cleanup pass.")
     max_upload_mb = fields.Integer(
         string='Maximum Upload Size (MB)', default=256,
         help="Applies only to the cleaning upload page. Every other upload "

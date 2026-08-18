@@ -56,7 +56,7 @@ class CleaningRecording(models.Model):
     # --- The video --------------------------------------------------------
     video_file = fields.Binary(
         string='Recording', attachment=True,
-        help="Held in Odoo's file store rather than in the database itself.")
+        help="Held in the server file store rather than in the database itself.")
     video_filename = fields.Char(string='File Name')
     mimetype = fields.Char(
         string='MIME Type', readonly=True,

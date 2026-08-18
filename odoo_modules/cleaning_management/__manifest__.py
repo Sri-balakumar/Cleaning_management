@@ -1,6 +1,6 @@
 {
     'name': 'Cleaning Management',
-    'version': '19.0.2.2.0',
+    'version': '19.0.2.3.0',
     'category': 'Human Resources',
     'summary': 'Scheduled camera check-in for office cleaning rounds',
     'description': """
