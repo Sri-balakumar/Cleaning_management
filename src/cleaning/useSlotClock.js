@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { AppState } from 'react-native';
 
+import { log } from '../utils/log';
+
 /**
  * Keeps the round countdowns ticking without ever letting the phone decide that
  * a round has opened.
@@ -64,23 +66,31 @@ export function useSlotClock(fetchState) {
       }, Infinity);
       delay = soonest <= near ? data?.poll_seconds_near || 15 : data?.poll_seconds || 60;
     }
+    log('slot-clock', `next sync in ${delay}s`);
     syncTimer.current = setTimeout(() => syncRef.current?.(), delay * 1000);
   }, []);
 
   const sync = useCallback(async () => {
     if (destroyed.current) return;
     const startedAt = now();
+    log('slot-clock', 'sync start');
     let data;
     try {
       data = await fetchState();
     } catch (error) {
       if (destroyed.current) return;
+      log('slot-clock', 'sync failed', error?.message ?? error);
       setState((prev) => ({ ...prev, error, loading: false }));
       scheduleNextSync(null, 15);
       return;
     }
     if (destroyed.current) return;
     const landedAt = now();
+    log('slot-clock', `sync ok in ${Math.round(landedAt - startedAt)}ms`, {
+      slots: (data.slots || []).length,
+      ok: data.ok,
+      is_allowed: data.is_allowed,
+    });
 
     // The server worked these figures out somewhere around the middle of the
     // round trip, so they are already slightly stale on arrival. Milliseconds
@@ -118,6 +128,7 @@ export function useSlotClock(fetchState) {
         (slot.state === 'upcoming' && untilOpen === 0) ||
         (slot.state === 'open' && untilClose === 0);
       if (reachedBoundary && !pending.current[slot.id]) {
+        log('slot-clock', `slot ${slot.id} (${slot.state}) reached its boundary - asking the server`);
         pending.current[slot.id] = true;
         needsSync = true;
       }
@@ -135,6 +146,7 @@ export function useSlotClock(fetchState) {
     // A backgrounded phone stops timing reliably, so re-sync on the way back
     // rather than trusting a countdown that was frozen in someone's pocket.
     const subscription = AppState.addEventListener('change', (status) => {
+      log('slot-clock', `app state -> ${status}`);
       if (status === 'active' && !paused.current) void syncRef.current?.();
     });
 
@@ -150,11 +162,13 @@ export function useSlotClock(fetchState) {
 
   /** Stop polling while the camera is open in front of this screen. */
   const pause = useCallback(() => {
+    log('slot-clock', 'paused');
     paused.current = true;
     clearSyncTimer();
   }, []);
 
   const resume = useCallback(() => {
+    log('slot-clock', 'resumed');
     paused.current = false;
     void syncRef.current?.();
   }, []);
@@ -162,13 +176,21 @@ export function useSlotClock(fetchState) {
   return { ...state, refresh: sync, pause, resume };
 }
 
-/** "4m 20s" / "45s" — compact enough for a button caption. */
-export function formatCountdown(seconds) {
+/**
+ * "4m 20s" / "45s" -- compact enough for a button caption.
+ *
+ * Takes the dictionary because the unit letters differ by language. Defaults to
+ * English so a caller that forgets still renders something sensible.
+ */
+export function formatCountdown(seconds, t) {
+  const h = t?.unitHour ?? 'h';
+  const m = t?.unitMinute ?? 'm';
+  const s = t?.unitSecond ?? 's';
   const total = Math.max(0, Math.round(seconds || 0));
   const hours = Math.floor(total / 3600);
   const minutes = Math.floor((total % 3600) / 60);
   const secs = total % 60;
-  if (hours) return `${hours}h ${minutes}m`;
-  if (minutes) return `${minutes}m ${secs}s`;
-  return `${secs}s`;
+  if (hours) return `${hours}${h} ${minutes}${m}`;
+  if (minutes) return `${minutes}${m} ${secs}${s}`;
+  return `${secs}${s}`;
 }

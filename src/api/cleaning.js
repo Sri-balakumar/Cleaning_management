@@ -22,6 +22,18 @@ export function getDashboardState(baseUrl) {
 }
 
 /**
+ * Is this person a cleaning manager?
+ *
+ * Answered by the server, from the dashboard call the app already makes. Being
+ * an administrator and being a cleaning manager are separate things, so asking
+ * is the only way to know.
+ */
+export async function isCleaningManager(baseUrl) {
+  const state = await getDashboardState(baseUrl);
+  return !!state?.is_manager;
+}
+
+/**
  * The upload route is a form post and keeps its cross-site protection, so it
  * needs a token. A browser reads one out of the page; we ask for it.
  */
@@ -46,11 +58,50 @@ export function fetchRecordings(baseUrl, { limit = 80, domain = [] } = {}) {
     args: [
       domain,
       ['id', 'slot_id', 'slot_date', 'user_id', 'started_at', 'duration_seconds',
-       'file_format', 'file_size_mb', 'truncated', 'ai_status'],
+       'file_format', 'quality', 'file_size_mb', 'truncated', 'ai_status', 'can_manage'],
     ],
     kwargs: { limit, order: 'slot_date desc, id desc' },
   });
 }
+
+/**
+ * Every field the detail screen shows. The list call deliberately asks for far
+ * less, since none of this is needed to render a row.
+ */
+const RECORDING_DETAIL_FIELDS = [
+  'id', 'slot_id', 'slot_date', 'user_id', 'can_manage',
+  'started_at', 'ended_at', 'duration_seconds', 'configured_duration_seconds', 'truncated',
+  'video_filename', 'file_format', 'quality', 'mimetype', 'file_size_mb', 'width', 'height',
+  'note',
+  // Manager-only in the interface; the server decides who may read them.
+  'ai_status', 'ai_score', 'ai_summary', 'ai_checked_at',
+];
+
+/** One recording, with everything the detail screen needs. */
+export async function fetchRecording(baseUrl, recordingId) {
+  const rows = await rpc(baseUrl, '/web/dataset/call_kw', {
+    model: 'cleaning.recording',
+    method: 'read',
+    args: [[Number(recordingId)], RECORDING_DETAIL_FIELDS],
+    kwargs: {},
+  });
+  return Array.isArray(rows) && rows.length ? rows[0] : null;
+}
+
+/**
+ * Delete recordings. Managers only -- the ACL withholds unlink from a regular
+ * user, so this is refused server-side even if the interface ever offered it.
+ *
+ * Worth knowing what it means: one recording per round per day is a database
+ * constraint, so removing one makes that round recordable again.
+ */
+export const deleteRecordings = (baseUrl, ids) =>
+  rpc(baseUrl, '/web/dataset/call_kw', {
+    model: 'cleaning.recording',
+    method: 'unlink',
+    args: [ids],
+    kwargs: {},
+  });
 
 export const videoUrl = (baseUrl, recordingId) =>
   `${baseUrl}/cleaning_management/video/${recordingId}`;
@@ -61,7 +112,7 @@ export function videoHeaders() {
   return Platform.OS !== 'web' && cookie ? { Cookie: `session_id=${cookie}` } : {};
 }
 
-/** Odoo stores naive UTC: "YYYY-MM-DD HH:MM:SS". */
+/** The backend stores naive UTC: "YYYY-MM-DD HH:MM:SS". */
 export function toServerDatetime(date) {
   const pad = (n) => String(n).padStart(2, '0');
   return (
@@ -91,8 +142,6 @@ export function uploadRecording(baseUrl, payload, onProgress) {
     width,
     height,
     truncated,
-    latitude,
-    longitude,
     frames = [],
   } = payload;
 
@@ -107,8 +156,6 @@ export function uploadRecording(baseUrl, payload, onProgress) {
   form.append('mimetype', mimetype);
   form.append('file_format', fileFormat);
   form.append('truncated', truncated ? '1' : '0');
-  form.append('latitude', String(latitude || 0));
-  form.append('longitude', String(longitude || 0));
   form.append('capture_mode', 'mobile');
   form.append('video', {
     uri: videoUri,
@@ -135,7 +182,12 @@ export function uploadRecording(baseUrl, payload, onProgress) {
     if (request.upload && onProgress) {
       request.upload.onprogress = (event) => {
         if (event.lengthComputable && event.total > 0) {
-          onProgress(event.loaded / event.total);
+          // Clamped because the two figures are not measured the same way: on a
+          // multipart body `loaded` counts everything actually pushed -- the
+          // boundary lines and per-part headers included -- while `total` is the
+          // content length the platform worked out. The ratio drifts past 1, and
+          // "Sending 104%" reads like a bug.
+          onProgress(Math.min(1, event.loaded / event.total));
         }
       };
     }

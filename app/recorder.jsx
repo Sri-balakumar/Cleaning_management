@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Animated, Pressable, StyleSheet, Text, View } from 'react-native';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -8,14 +8,25 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { AppError } from '../src/api/errors';
 import { getDashboardState, getUploadToken, uploadRecording } from '../src/api/cleaning';
 import { useAuth } from '../src/auth/AuthContext';
+import { RequireAuth } from '../src/auth/RequireAuth';
 import { ErrorBanner } from '../src/components/ErrorBanner';
 import { PrimaryButton } from '../src/components/PrimaryButton';
 import { formatCountdown } from '../src/cleaning/useSlotClock';
+import { translateError, useT } from '../src/i18n/LanguageProvider';
 import { colors, radius, spacing, typography } from '../src/theme';
 
-/** The camera needs a moment to reconfigure after the mode prop changes. */
+/**
+ * The camera only needs reconfiguring for the single still taken *after*
+ * recording. Nothing waits on this before a recording starts.
+ */
 const MODE_SETTLE_MS = 450;
 const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+/** "0:07" -- what a camera shows, rather than "7s". */
+function clock(seconds) {
+  const total = Math.max(0, Math.floor(seconds));
+  return `${Math.floor(total / 60)}:${String(total % 60).padStart(2, '0')}`;
+}
 
 /** Map the server's pixel height onto the camera's quality presets. */
 function videoQualityFor(settings) {
@@ -25,14 +36,26 @@ function videoQualityFor(settings) {
   return '480p';
 }
 
-export default function RecorderScreen() {
+export default function RecorderRoute() {
+  return (
+    <RequireAuth>
+      <RecorderScreen />
+    </RequireAuth>
+  );
+}
+
+function RecorderScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { connection } = useAuth();
+  const { t, rtlText } = useT();
   const { slotId } = useLocalSearchParams();
 
   const [permission, requestPermission] = useCameraPermissions();
-  const [mode, setMode] = useState('picture');
+  // Never flipped before or during a shot: changing it reconfigures the
+  // capture session, which stalls the preview exactly when it is being watched.
+  const [mode, setMode] = useState('video');
+  const [elapsed, setElapsed] = useState(0);
   const [phase, setPhase] = useState('loading'); // loading|ready|recording|uploading|done
   const [settings, setSettings] = useState(null);
   const [round, setRound] = useState(null);
@@ -43,8 +66,29 @@ export default function RecorderScreen() {
   const cameraRef = useRef(null);
   const cancelled = useRef(false);
   const stopRequested = useRef(false);
+  const ticker = useRef(null);
+  const pulse = useRef(new Animated.Value(1)).current;
 
-  useEffect(() => () => { cancelled.current = true; }, []);
+  useEffect(
+    () => () => {
+      cancelled.current = true;
+      if (ticker.current) clearInterval(ticker.current);
+    },
+    [],
+  );
+
+  // The recording indicator breathes, the way a camera's does.
+  useEffect(() => {
+    if (phase !== 'recording') return undefined;
+    const loop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(pulse, { toValue: 0.25, duration: 600, useNativeDriver: true }),
+        Animated.timing(pulse, { toValue: 1, duration: 600, useNativeDriver: true }),
+      ]),
+    );
+    loop.start();
+    return () => loop.stop();
+  }, [phase, pulse]);
 
   // Ask the server what to record and how, rather than trusting anything the
   // phone already had lying around.
@@ -54,29 +98,30 @@ export default function RecorderScreen() {
         const state = await getDashboardState(connection.baseUrl);
         if (cancelled.current) return;
         const target = (state.slots || []).find((s) => String(s.id) === String(slotId));
-        if (!target) throw new AppError('server', 'That round is no longer available.');
-        if (target.state !== 'open') {
-          throw new AppError('server', 'That round is not open for recording right now.');
-        }
+        if (!target) throw new AppError('server', t.roundNoLongerAvailable);
+        if (target.state !== 'open') throw new AppError('server', t.roundNotOpen);
         setRound(target);
         setSettings(state.settings || {});
         setRemaining(target.seconds_until_close || 0);
         setPhase('ready');
       } catch (e) {
         if (!cancelled.current) {
-          setError(AppError.from(e).message);
+          setError(translateError(t, AppError.from(e)));
           setPhase('ready');
         }
       }
     })();
-  }, [connection, slotId]);
+  }, [connection, slotId, t]);
 
   const duration = settings?.duration_seconds || 30;
 
   /**
-   * Best-effort still. The camera cannot take one while it is recording, so
-   * these are captured either side of the clip -- and a failure here must never
-   * cost the recording itself, which is the thing that actually matters.
+   * One still for the AI review, which reads images rather than video.
+   *
+   * Taken only *after* the clip is finished: the camera cannot capture a still
+   * while recording, and doing it beforehand fired a shutter and stalled the
+   * preview right as the user pressed record. By the time this runs the video
+   * is already safe, so a slow or failed frame costs nothing.
    */
   const grabFrame = useCallback(async () => {
     try {
@@ -93,39 +138,52 @@ export default function RecorderScreen() {
     setError(null);
     setPhase('recording');
     stopRequested.current = false;
+    setElapsed(0);
     const startedAt = new Date();
 
-    const frames = [];
-    const before = await grabFrame();
-    if (before) frames.push(before);
+    // Display only. recordAsync's maxDuration is what actually ends the clip;
+    // if this interval were in charge, a slow render would truncate the video.
+    ticker.current = setInterval(
+      () => setElapsed(Math.floor((Date.now() - startedAt.getTime()) / 1000)),
+      500,
+    );
 
     let video;
     try {
-      setMode('video');
-      await wait(MODE_SETTLE_MS);
       video = await cameraRef.current?.recordAsync({ maxDuration: duration });
     } catch (e) {
+      if (ticker.current) {
+        clearInterval(ticker.current);
+        ticker.current = null;
+      }
       if (!cancelled.current) {
-        setError(AppError.from(e).message || 'The camera could not record.');
+        setError(translateError(t, AppError.from(e)) || t.cameraCouldNotRecord);
         setPhase('ready');
       }
       return;
     }
 
     const endedAt = new Date();
+    if (ticker.current) {
+      clearInterval(ticker.current);
+      ticker.current = null;
+    }
     if (!video?.uri) {
       if (!cancelled.current) {
-        setError('Nothing was recorded. Please try again.');
+        setError(t.nothingWasRecorded);
         setPhase('ready');
       }
       return;
     }
 
-    const after = await grabFrame();
-    if (after) frames.push(after);
+    const seconds = (endedAt - startedAt) / 1000;
+    // Safe to do now: the clip exists, so a slow or failed still costs
+    // nothing but a moment before the upload begins.
+    const frames = [];
+    const still = await grabFrame();
+    if (still) frames.push(still);
 
-    const elapsed = (endedAt - startedAt) / 1000;
-    await send({ video, startedAt, endedAt, elapsed, frames });
+    await send({ video, startedAt, endedAt, elapsed: seconds, frames });
   }, [duration, grabFrame]);
 
   const send = useCallback(
@@ -134,20 +192,6 @@ export default function RecorderScreen() {
       setProgress(0);
       try {
         const csrfToken = await getUploadToken(connection.baseUrl);
-        let latitude = 0;
-        let longitude = 0;
-        try {
-          // Nice for the audit trail, never worth failing an upload over.
-          const Location = await import('expo-location');
-          const granted = await Location.requestForegroundPermissionsAsync();
-          if (granted.status === 'granted') {
-            const fix = await Location.getCurrentPositionAsync({ accuracy: 3 });
-            latitude = fix.coords.latitude;
-            longitude = fix.coords.longitude;
-          }
-        } catch {
-          /* no location, carry on */
-        }
 
         await uploadRecording(
           connection.baseUrl,
@@ -164,8 +208,6 @@ export default function RecorderScreen() {
             height: settings?.height || 0,
             // Stopped by hand before the configured length was reached.
             truncated: stopRequested.current && elapsed < duration - 1,
-            latitude,
-            longitude,
             frames,
           },
           setProgress,
@@ -175,12 +217,12 @@ export default function RecorderScreen() {
         router.back();
       } catch (e) {
         if (!cancelled.current) {
-          setError(AppError.from(e).message);
+          setError(translateError(t, AppError.from(e)));
           setPhase('ready');
         }
       }
     },
-    [connection, duration, round, router, settings],
+    [connection, duration, round, router, settings, t],
   );
 
   const stop = useCallback(() => {
@@ -196,13 +238,11 @@ export default function RecorderScreen() {
     return (
       <Centered>
         <Ionicons name="videocam-off-outline" size={44} color={colors.white} />
-        <Text style={styles.permTitle}>Camera access needed</Text>
-        <Text style={styles.permText}>
-          The app records a short clip to prove the round was done. No sound is recorded.
-        </Text>
-        <PrimaryButton label="Allow camera" onPress={requestPermission} style={styles.permButton} />
+        <Text style={styles.permTitle}>{t.cameraAccessNeeded}</Text>
+        <Text style={styles.permText}>{t.cameraAccessBody}</Text>
+        <PrimaryButton label={t.allowCamera} onPress={requestPermission} style={styles.permButton} />
         <Pressable onPress={() => router.back()} hitSlop={10}>
-          <Text style={styles.cancel}>Cancel</Text>
+          <Text style={styles.cancel}>{t.cancel}</Text>
         </Pressable>
       </Centered>
     );
@@ -219,6 +259,10 @@ export default function RecorderScreen() {
         /* Audio is deliberately never captured, which also avoids asking for
            the microphone at all. */
         mute
+        /* The one still is taken after recording and should not announce
+           itself with a shutter the user did not ask for. */
+        animateShutter={false}
+        shutterSound={false}
       />
 
       <View style={[styles.overlay, { paddingTop: insets.top + spacing.lg, paddingBottom: insets.bottom + spacing.xxl }]}>
@@ -227,7 +271,7 @@ export default function RecorderScreen() {
             <Ionicons name="close" size={26} color={colors.white} />
           </Pressable>
           <View style={styles.roundChip}>
-            <Text style={styles.roundName}>{round?.name ?? 'Round'}</Text>
+            <Text style={[styles.roundName, rtlText]}>{round?.name ?? t.round}</Text>
             {round ? <Text style={styles.roundWindow}>{round.window_label}</Text> : null}
           </View>
           <View style={{ width: 26 }} />
@@ -238,26 +282,44 @@ export default function RecorderScreen() {
 
           {phase === 'uploading' ? (
             <View style={styles.uploading}>
-              <Text style={styles.uploadText}>Sending… {Math.round(progress * 100)}%</Text>
+              <Text style={styles.uploadText}>
+                {t.sending} {Math.min(100, Math.round(progress * 100))}%
+              </Text>
               <View style={styles.track}>
-                <View style={[styles.fill, { width: `${Math.max(4, progress * 100)}%` }]} />
+                <View
+                  style={[
+                    styles.fill,
+                    { width: `${Math.min(100, Math.max(4, progress * 100))}%` },
+                  ]}
+                />
               </View>
             </View>
           ) : phase === 'recording' ? (
             <>
               <View style={styles.recPill}>
-                <View style={styles.recDot} />
-                <Text style={styles.recText}>Recording · up to {formatCountdown(duration)}</Text>
+                <Animated.View style={[styles.recDot, { opacity: pulse }]} />
+                <Text style={styles.recText}>
+                  {clock(elapsed)} / {clock(duration)}
+                </Text>
               </View>
-              <PrimaryButton label="Stop" icon="stop" variant="danger" onPress={stop} />
+              <View style={styles.track}>
+                <View
+                  style={[
+                    styles.fill,
+                    styles.fillRec,
+                    { width: `${Math.min(100, (elapsed / Math.max(duration, 1)) * 100)}%` },
+                  ]}
+                />
+              </View>
+              <PrimaryButton label={t.stop} icon="stop" variant="danger" onPress={stop} />
             </>
           ) : (
             <>
               <Text style={styles.help}>
-                {`A ${formatCountdown(duration)} clip will be recorded. No sound.`}
+                {`${formatCountdown(duration, t)} ${t.clipWillBeRecorded}`}
               </Text>
               <PrimaryButton
-                label="Start recording"
+                label={t.startRecording}
                 icon="videocam"
                 onPress={start}
                 disabled={phase === 'loading' || !round}
@@ -314,7 +376,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.lg,
   },
   recDot: { width: 9, height: 9, borderRadius: 5, backgroundColor: colors.danger },
-  recText: { fontSize: 12, fontWeight: '600', color: colors.white },
+  recText: { fontSize: 13, fontWeight: '800', color: colors.white, letterSpacing: 0.5 },
   uploading: { gap: spacing.sm },
   uploadText: { fontSize: 14, fontWeight: '600', color: colors.white, textAlign: 'center' },
   track: {
@@ -324,4 +386,5 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
   fill: { height: 8, borderRadius: radius.pill, backgroundColor: colors.accent },
+  fillRec: { backgroundColor: colors.danger },
 });
