@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   Animated,
+  Image,
   KeyboardAvoidingView,
   Platform,
   Pressable,
@@ -20,7 +21,10 @@ import { AppTextField } from '../../src/components/AppTextField';
 import { DatabasePicker, SelectField } from '../../src/components/DatabasePicker';
 import { ErrorBanner } from '../../src/components/ErrorBanner';
 import { GradientBackground, GradientOrbs } from '../../src/components/GradientBackground';
+import { PoweredBy } from '../../src/components/PoweredBy';
+import { LanguageToggle } from '../../src/components/LanguageToggle';
 import { PrimaryButton } from '../../src/components/PrimaryButton';
+import { translateError, useT } from '../../src/i18n/LanguageProvider';
 import { colors, radius, spacing, typography } from '../../src/theme';
 import { displayUrl, looksProbeworthy } from '../../src/utils/url';
 import { useKeyboardHeight } from '../../src/utils/useKeyboardHeight';
@@ -29,6 +33,7 @@ export default function LoginScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { signIn } = useAuth();
+  const { t, rtlText } = useT();
   const keyboardHeight = useKeyboardHeight();
   const [urlInput, setUrlInput] = useState('');
   const [probeState, setProbeState] = useState('idle');
@@ -88,7 +93,7 @@ export default function LoginScreen() {
       setBaseUrl(null);
       setDatabases([]);
       setListingDisabled(false);
-      setUrlError(err.message);
+      setUrlError(translateError(t, err));
       setUrlErrorDetail(err.detail ?? null);
     }
   }, []);
@@ -137,25 +142,25 @@ export default function LoginScreen() {
     setFormError(null);
     setCredentialError(null);
     if (!baseUrl) {
-      setFormError('Connect to a server before signing in.');
+      setFormError(t.connectFirst);
       return;
     }
     if (!db.trim()) {
-      setFormError('Choose or enter a database.');
+      setFormError(t.chooseOrEnterDatabase);
       return;
     }
     if (!login.trim() || !password) {
-      setCredentialError('Enter both your username and password.');
+      setCredentialError(t.enterBothCredentials);
       return;
     }
     setSubmitting(true);
     try {
       await signIn({ baseUrl, db: db.trim(), login: login.trim(), password });
-      router.replace('/rounds');
+      router.replace('/profile');
     } catch (error) {
       const err = AppError.from(error);
-      if (err.kind === 'invalid_credentials') setCredentialError(err.message);
-      else setFormError(err.message);
+      if (err.kind === 'invalid_credentials') setCredentialError(translateError(t, err));
+      else setFormError(translateError(t, err));
     } finally {
       setSubmitting(false);
     }
@@ -174,7 +179,9 @@ export default function LoginScreen() {
               paddingTop: insets.top + spacing.xxl,
               // Edge-to-edge means the window no longer shrinks for the
               // keyboard, so the scroll content has to make the room itself.
-              paddingBottom: spacing.xxxl + keyboardHeight,
+              // insets.bottom keeps the footer clear of the system navigation
+              // bar -- this screen has no tab bar to reserve that space.
+              paddingBottom: spacing.xxxl + insets.bottom + keyboardHeight,
             },
           ]}
           keyboardShouldPersistTaps="handled"
@@ -182,18 +189,27 @@ export default function LoginScreen() {
           showsVerticalScrollIndicator={false}
         >
           <View style={styles.header}>
-            <View style={styles.logo}>
-              <Ionicons name="sparkles" size={28} color={colors.white} />
+            <Image
+              source={require('../../assets/logo-369.png')}
+              style={styles.wordmark}
+              resizeMode="contain"
+              accessibilityRole="image"
+              accessibilityLabel="369 ai.Biz"
+            />
+            <Text style={styles.brand}>{t.appName}</Text>
+            <Text style={styles.tagline}>{t.signInToWorkspace}</Text>
+            {/* Here as well as on Profile: a first-time Arabic user should not
+                have to read an English form to find the setting. */}
+            <View style={styles.langWrap}>
+              <LanguageToggle onGradient compact />
             </View>
-            <Text style={styles.brand}>CleanPro</Text>
-            <Text style={styles.tagline}>Sign in to your workspace</Text>
           </View>
 
           <View style={styles.card}>
             <AppTextField
-              label="Server address"
+              label={t.serverAddress}
               icon="globe-outline"
-              placeholder="erp.mycompany.com"
+              placeholder={t.serverPlaceholder}
               value={urlInput}
               onChangeText={setUrlInput}
               onBlur={() => {
@@ -204,8 +220,8 @@ export default function LoginScreen() {
               detail={urlErrorDetail}
               hint={
                 probeState === 'ok' && baseUrl
-                  ? `Connected to ${displayUrl(baseUrl)}`
-                  : 'Address or IP, with a port if needed. On the Android emulator use 10.0.2.2 rather than localhost.'
+                  ? `${t.connectedTo} ${displayUrl(baseUrl)}`
+                  : t.serverHint
               }
               autoCapitalize="none"
               autoCorrect={false}
@@ -216,27 +232,27 @@ export default function LoginScreen() {
 
             {probeState === 'ok' && !listingDisabled ? (
               <SelectField
-                label="Database"
+                label={t.database}
                 value={db || null}
-                placeholder={databases.length ? 'Choose a database' : 'No databases found'}
+                placeholder={databases.length ? t.chooseDatabase : t.noDatabasesFound}
                 onPress={() => setPickerOpen(true)}
                 disabled={submitting || databases.length <= 1}
                 hint={
                   databases.length === 1
-                    ? 'This server hosts a single database, selected automatically.'
-                    : `${databases.length} databases available on this server.`
+                    ? t.singleDatabaseHint
+                    : `${databases.length} ${t.databasesAvailable}`
                 }
               />
             ) : null}
 
             {probeState === 'ok' && listingDisabled ? (
               <AppTextField
-                label="Database"
+                label={t.database}
                 icon="server-outline"
-                placeholder="Database name"
+                placeholder={t.databaseNamePlaceholder}
                 value={db}
                 onChangeText={setDb}
-                hint="This server does not publish its database list. Enter the database name manually."
+                hint={t.manualDatabaseHint}
                 autoCapitalize="none"
                 autoCorrect={false}
                 editable={!submitting}
@@ -260,9 +276,9 @@ export default function LoginScreen() {
                 <View style={styles.divider} />
 
                 <AppTextField
-                  label="Username"
+                  label={t.username}
                   icon="person-outline"
-                  placeholder="you@company.com"
+                  placeholder={t.usernamePlaceholder}
                   value={login}
                   onChangeText={setLogin}
                   onFocus={scrollToCredentials}
@@ -276,9 +292,9 @@ export default function LoginScreen() {
 
                 <AppTextField
                   ref={passwordRef}
-                  label="Password"
+                  label={t.password}
                   icon="lock-closed-outline"
-                  placeholder="Your password"
+                  placeholder={t.passwordPlaceholder}
                   value={password}
                   onChangeText={setPassword}
                   onFocus={scrollToCredentials}
@@ -296,7 +312,7 @@ export default function LoginScreen() {
             <ErrorBanner message={formError} />
 
             <PrimaryButton
-              label={credentialsReady ? 'Sign in' : 'Connect to server'}
+              label={credentialsReady ? t.signIn : t.connectToServer}
               icon={credentialsReady ? 'arrow-forward' : undefined}
               onPress={() => (credentialsReady ? void handleSubmit() : void runProbe(urlInput))}
               loading={submitting || probeState === 'checking'}
@@ -307,14 +323,15 @@ export default function LoginScreen() {
             {probeState === 'error' ? (
               <Pressable onPress={() => void runProbe(urlInput)} style={styles.retry} hitSlop={8}>
                 <Ionicons name="refresh" size={15} color={colors.primary} />
-                <Text style={styles.retryText}>Try again</Text>
+                <Text style={styles.retryText}>{t.tryAgainNow}</Text>
               </Pressable>
             ) : null}
           </View>
 
           <Text style={styles.footnote}>
-            Your credentials are sent directly to your server and stored only on this device.
+            {t.credentialsFootnote}
           </Text>
+          <PoweredBy onGradient versionOnly />
         </ScrollView>
       </KeyboardAvoidingView>
 
@@ -335,18 +352,10 @@ const styles = StyleSheet.create({
   flex: { flex: 1 },
   scroll: { flexGrow: 1, paddingHorizontal: spacing.xl },
   header: { alignItems: 'center', marginBottom: spacing.xxl },
-  logo: {
-    width: 64,
-    height: 64,
-    borderRadius: radius.lg,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: colors.glassStrong,
-    borderWidth: 1,
-    borderColor: colors.glassBorder,
-    marginBottom: spacing.lg,
-  },
+  // 467x368 source, held to that ratio so the wordmark never distorts.
+  wordmark: { width: 140, height: 110, marginBottom: spacing.lg },
   brand: { fontSize: 28, fontWeight: '700', color: colors.white, letterSpacing: -0.5 },
+  langWrap: { marginTop: spacing.lg },
   tagline: {
     fontSize: 14,
     fontWeight: '500',

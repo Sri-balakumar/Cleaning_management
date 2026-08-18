@@ -29,7 +29,9 @@ function isValidHost(host) {
 /** Split raw user input into its parts. Throws `invalid_url` if unusable. */
 export function parseServerInput(raw) {
   const cleaned = (raw ?? '').trim().replace(/\s+/g, '');
-  if (!cleaned) throw new AppError('invalid_url', 'Enter your server address.');
+  // No custom message: without one the caller renders the translated text for
+  // this kind, which a literal here would override with English.
+  if (!cleaned) throw new AppError('invalid_url');
   // The scheme is peeled off explicitly. Leaving it to one combined regex lets
   // the pattern backtrack and read "http" itself as the hostname for input
   // like "http://", which then looks valid when it very much is not.
@@ -46,7 +48,7 @@ export function parseServerInput(raw) {
   } else if (cleaned.includes('//')) {
     throw new AppError('invalid_url');
   }
-  if (!rest) throw new AppError('invalid_url', 'Enter your server address.');
+  if (!rest) throw new AppError('invalid_url');
   const slash = rest.indexOf('/');
   const authorityPart = slash === -1 ? rest : rest.slice(0, slash);
   const path = (slash === -1 ? '' : rest.slice(slash))

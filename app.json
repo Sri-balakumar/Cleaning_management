@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "CleanPro",
+    "name": "369 CleanPro",
     "slug": "cleaning-management",
     "version": "1.0.0",
     "orientation": "portrait",
@@ -14,7 +14,7 @@
     },
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.cleanpro.app",
+      "bundleIdentifier": "com.alphalize.cleanpro369",
       "userInterfaceStyle": "light"
     },
     "android": {
@@ -24,7 +24,7 @@
       },
       "edgeToEdgeEnabled": true,
       "predictiveBackGestureEnabled": false,
-      "package": "com.cleanpro.app",
+      "package": "com.alphalize.cleanpro369",
       "softwareKeyboardLayoutMode": "resize",
       "userInterfaceStyle": "light"
     },
@@ -48,16 +48,11 @@
       [
         "expo-camera",
         {
-          "cameraPermission": "CleanPro uses the camera to record a short clip showing a cleaning round was completed.",
+          "cameraPermission": "369 CleanPro uses the camera to record a short clip showing a cleaning round was completed.",
           "recordAudioAndroid": false
         }
       ],
-      [
-        "expo-location",
-        {
-          "locationWhenInUsePermission": "CleanPro notes where a cleaning round was recorded."
-        }
-      ]
+      "@react-native-community/datetimepicker"
     ]
   }
 }

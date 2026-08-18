@@ -12,6 +12,7 @@ import { getSessionCookie, setSessionCookie } from '../api/rpcClient';
 import { authenticate, destroySession, fetchUserRecord, getSessionInfo } from '../api/backend';
 import {
   clearAll,
+  clearRememberedServer,
   loadPassword,
   loadSession,
   savePassword,
@@ -119,16 +120,27 @@ export function AuthProvider({ children }) {
     },
     [applySession],
   );
-  const signOut = useCallback(async () => {
-    const baseUrl = connection?.baseUrl;
-    if (baseUrl) await destroySession(baseUrl);
-    setSessionCookie(null);
-    await clearAll();
-    if (!mounted.current) return;
-    setUser(null);
-    setConnection(null);
-    setStatus('unauthenticated');
-  }, [connection]);
+  /**
+   * Sign out. Always clears the session and the stored password.
+   *
+   * `forgetServer` additionally drops the remembered address. Without it the
+   * login screen refills the previous address and immediately probes it, so
+   * moving to a different server means clearing that field by hand first.
+   */
+  const signOut = useCallback(
+    async ({ forgetServer = false } = {}) => {
+      const baseUrl = connection?.baseUrl;
+      if (baseUrl) await destroySession(baseUrl);
+      setSessionCookie(null);
+      await clearAll();
+      if (forgetServer) await clearRememberedServer();
+      if (!mounted.current) return;
+      setUser(null);
+      setConnection(null);
+      setStatus('unauthenticated');
+    },
+    [connection],
+  );
   const refreshProfile = useCallback(async () => {
     if (!connection || !user) return;
     const live = await getSessionInfo(connection.baseUrl);

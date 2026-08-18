@@ -10,6 +10,7 @@ import {
   useWindowDimensions,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { useT } from '../i18n/LanguageProvider';
 import { colors, radius, spacing, typography } from '../theme';
 /** Read-only row that opens the picker. Mirrors AppTextField's visual shape. */
 export function SelectField({ label, value, placeholder, onPress, disabled, hint }) {
@@ -42,6 +43,7 @@ export function SelectField({ label, value, placeholder, onPress, disabled, hint
   );
 }
 export function DatabasePicker({ visible, databases, selected, onSelect, onClose }) {
+  const { t, rtlRow, rtlText } = useT();
   const { height } = useWindowDimensions();
   const slide = useRef(new Animated.Value(0)).current;
   useEffect(() => {
@@ -71,9 +73,10 @@ export function DatabasePicker({ visible, databases, selected, onSelect, onClose
             style={[styles.sheet, { maxHeight: height * 0.7, transform: [{ translateY }] }]}
           >
             <View style={styles.grabber} />
-            <Text style={styles.sheetTitle}>Select database</Text>
-            <Text style={styles.sheetSubtitle}>
-              {databases.length} database{databases.length === 1 ? '' : 's'} found on this server
+            <Text style={[styles.sheetTitle, rtlText]}>{t.selectDatabase}</Text>
+            <Text style={[styles.sheetSubtitle, rtlText]}>
+              {databases.length}{' '}
+              {databases.length === 1 ? t.databaseFoundOne : t.databasesFoundMany}
             </Text>
 
             <FlatList
@@ -88,7 +91,7 @@ export function DatabasePicker({ visible, databases, selected, onSelect, onClose
                     onPress={() => onSelect(item)}
                     accessibilityRole="button"
                     accessibilityState={{ selected: active }}
-                    style={({ pressed }) => [styles.row, pressed && styles.rowPressed]}
+                    style={({ pressed }) => [styles.row, rtlRow, pressed && styles.rowPressed]}
                   >
                     <View style={[styles.rowIcon, active && styles.rowIconActive]}>
                       <Ionicons
@@ -98,7 +101,7 @@ export function DatabasePicker({ visible, databases, selected, onSelect, onClose
                       />
                     </View>
                     <Text
-                      style={[styles.rowText, active && styles.rowTextActive]}
+                      style={[styles.rowText, rtlText, active && styles.rowTextActive]}
                       numberOfLines={1}
                     >
                       {item}

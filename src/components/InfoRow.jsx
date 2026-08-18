@@ -1,27 +1,32 @@
 import React from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { useT } from '../i18n/LanguageProvider';
 import { colors, radius, spacing, typography } from '../theme';
-export function InfoRow({ icon, label, value, empty = 'Not set', last = false }) {
+export function InfoRow({ icon, label, value, empty, last = false }) {
+  const { t, rtlRow, rtlText } = useT();
+  const placeholder = empty ?? t.notSet;
   const missing = !value;
   return (
-    <View style={[styles.row, last && styles.rowLast]}>
+    <View style={[styles.row, rtlRow, last && styles.rowLast]}>
       <View style={styles.iconBox}>
         <Ionicons name={icon} size={17} color={colors.primary} />
       </View>
       <View style={styles.textCol}>
-        <Text style={styles.label}>{label}</Text>
-        <Text style={[styles.value, missing && styles.valueMissing]} selectable={!missing}>
-          {value || empty}
+        <Text style={[styles.label, rtlText]}>{label}</Text>
+        <Text style={[styles.value, rtlText, missing && styles.valueMissing]} selectable={!missing}>
+          {value || placeholder}
         </Text>
       </View>
     </View>
   );
 }
 export function InfoCard({ title, children }) {
+  const { rtlText } = useT();
+
   return (
     <View style={styles.cardWrap}>
-      <Text style={styles.cardTitle}>{title}</Text>
+      <Text style={[styles.cardTitle, rtlText]}>{title}</Text>
       <View style={styles.card}>{children}</View>
     </View>
   );

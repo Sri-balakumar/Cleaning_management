@@ -93,11 +93,18 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.xl,
   },
   gradient: {
-    shadowColor: colors.primary,
-    shadowOpacity: 0.35,
-    shadowRadius: 16,
-    shadowOffset: { width: 0, height: 8 },
-    elevation: 6,
+    // Android draws the elevation shadow off a solid backing behind the view.
+    // A LinearGradient carries no background of its own, so that backing showed
+    // through as white inside the rounded corners. Painting the base colour
+    // underneath - and clipping to the radius - leaves nothing white to show.
+    backgroundColor: colors.primary,
+    overflow: 'hidden',
+    // A lift, not a glow - the old one bled indigo across the white card.
+    shadowColor: colors.primaryDark,
+    shadowOpacity: 0.2,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 5 },
+    elevation: 4,
   },
   ghost: { backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border },
   danger: { backgroundColor: colors.dangerBg, borderWidth: 1, borderColor: colors.dangerBorder },

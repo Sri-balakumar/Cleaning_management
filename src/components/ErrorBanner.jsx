@@ -2,6 +2,28 @@ import React, { useEffect, useRef } from 'react';
 import { Animated, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { colors, radius, spacing } from '../theme';
+/** A tone is a colour set plus the icon that goes with it. */
+const TONES = {
+  danger: {
+    fill: colors.dangerBg,
+    edge: colors.dangerBorder,
+    ink: colors.danger,
+    icon: 'alert-circle',
+  },
+  warning: {
+    fill: colors.warningBg,
+    edge: colors.warningBorder,
+    ink: colors.warning,
+    icon: 'information-circle',
+  },
+  success: {
+    fill: colors.successBg,
+    edge: colors.successBorder,
+    ink: colors.success,
+    icon: 'checkmark-circle',
+  },
+};
+
 export function ErrorBanner({ message, tone = 'danger' }) {
   const opacity = useRef(new Animated.Value(0)).current;
   useEffect(() => {
@@ -12,24 +34,14 @@ export function ErrorBanner({ message, tone = 'danger' }) {
     }).start();
   }, [message, opacity]);
   if (!message) return null;
-  const danger = tone === 'danger';
+  const { fill, edge, ink, icon } = TONES[tone] ?? TONES.danger;
   return (
     <Animated.View
-      style={[
-        styles.banner,
-        { opacity, backgroundColor: danger ? colors.dangerBg : colors.warningBg },
-        { borderColor: danger ? colors.dangerBorder : colors.warningBorder },
-      ]}
+      style={[styles.banner, { opacity, backgroundColor: fill, borderColor: edge }]}
     >
-      <Ionicons
-        name={danger ? 'alert-circle' : 'information-circle'}
-        size={18}
-        color={danger ? colors.danger : colors.warning}
-      />
+      <Ionicons name={icon} size={18} color={ink} />
       <View style={styles.textWrap}>
-        <Text style={[styles.text, { color: danger ? colors.danger : colors.warning }]}>
-          {message}
-        </Text>
+        <Text style={[styles.text, { color: ink }]}>{message}</Text>
       </View>
     </Animated.View>
   );

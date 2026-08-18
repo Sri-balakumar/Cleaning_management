@@ -4,13 +4,16 @@ import { Redirect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../src/auth/AuthContext';
 import { GradientBackground, GradientOrbs } from '../src/components/GradientBackground';
+import { useT } from '../src/i18n/LanguageProvider';
 import { colors, radius, spacing } from '../src/theme';
+import { log } from '../src/utils/log';
 /**
  * Boot gate. Shows the branded splash while AuthProvider tries to restore a
  * session, then sends the user to the right stack.
  */
 export default function Index() {
   const { status } = useAuth();
+  const { t } = useT();
   if (status === 'restoring') {
     return (
       <GradientBackground>
@@ -19,14 +22,16 @@ export default function Index() {
           <View style={styles.logo}>
             <Ionicons name="sparkles" size={34} color={colors.white} />
           </View>
-          <Text style={styles.title}>CleanPro</Text>
-          <Text style={styles.subtitle}>Restoring your session…</Text>
+          <Text style={styles.title}>{t.appName}</Text>
+          <Text style={styles.subtitle}>{t.restoringSession}</Text>
           <ActivityIndicator color={colors.white} style={styles.spinner} />
         </View>
       </GradientBackground>
     );
   }
-  return <Redirect href={status === 'authenticated' ? '/rounds' : '/login'} />;
+  const target = status === 'authenticated' ? '/profile' : '/login';
+  log('boot', `session ${status} - redirecting to ${target}`);
+  return <Redirect href={target} />;
 }
 const styles = StyleSheet.create({
   center: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: spacing.xxl },

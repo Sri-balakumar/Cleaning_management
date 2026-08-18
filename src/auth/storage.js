@@ -1,51 +1,15 @@
-import { Platform } from 'react-native';
-import * as SecureStore from 'expo-secure-store';
+import { getItem, removeItem, setItem } from '../utils/deviceStore';
 /**
- * expo-secure-store (SDK 54) has two constraints that shape this module:
+ * What this app remembers about the signed-in session.
  *
- *  1. Values over roughly 2048 bytes can be rejected by iOS. So only small
- *     scalars are persisted -- notably the base64 avatar is NEVER stored here,
- *     it would blow the limit on its own. It lives in memory for the session.
- *  2. There is no web implementation. On web we fall back to localStorage so
- *     `npm run web` stays usable for UI work; native keeps Keychain/Keystore.
+ * Only small scalars are persisted -- notably the base64 avatar is NEVER stored
+ * here, it would blow the platform's value-size limit on its own. It lives in
+ * memory for the session instead.
  */
 const MAX_SECURE_VALUE_BYTES = 1800;
 const SESSION_KEY = 'cleanpro.session';
 const PASSWORD_KEY = 'cleanpro.password';
 const LAST_SERVER_KEY = 'cleanpro.lastServer';
-const isWeb = Platform.OS === 'web';
-async function setItem(key, value) {
-  if (isWeb) {
-    try {
-      globalThis.localStorage?.setItem(key, value);
-    } catch {
-      // Private-mode browsers can refuse writes; session simply won't persist.
-    }
-    return;
-  }
-  await SecureStore.setItemAsync(key, value);
-}
-async function getItem(key) {
-  if (isWeb) {
-    try {
-      return globalThis.localStorage?.getItem(key) ?? null;
-    } catch {
-      return null;
-    }
-  }
-  return SecureStore.getItemAsync(key);
-}
-async function removeItem(key) {
-  if (isWeb) {
-    try {
-      globalThis.localStorage?.removeItem(key);
-    } catch {
-      /* ignore */
-    }
-    return;
-  }
-  await SecureStore.deleteItemAsync(key);
-}
 export async function saveSession(session) {
   const payload = JSON.stringify(session);
   if (payload.length > MAX_SECURE_VALUE_BYTES) {

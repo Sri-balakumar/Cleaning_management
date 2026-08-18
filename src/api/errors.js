@@ -24,6 +24,10 @@ export class AppError extends Error {
     this.name = 'AppError';
     this.kind = kind;
     this.detail = detail;
+    // Tracks whether this carries wording of its own -- typically the server's
+    // explanation, which is more specific than anything we could substitute and
+    // is not ours to translate. See translateError.
+    this.hasOwnMessage = Boolean(message);
     // Required so `instanceof` survives the TS -> ES5-ish transpile in Hermes.
     Object.setPrototypeOf(this, AppError.prototype);
   }

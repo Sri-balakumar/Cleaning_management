@@ -9,6 +9,7 @@ import {
   View,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { useT } from '../i18n/LanguageProvider';
 import { colors, radius, spacing, typography } from '../theme';
 export const AppTextField = forwardRef(function AppTextField(
   {
@@ -25,6 +26,7 @@ export const AppTextField = forwardRef(function AppTextField(
   },
   ref,
 ) {
+  const { t, rtlRow, rtlText } = useT();
   const [focused, setFocused] = useState(false);
   const [hidden, setHidden] = useState(secureToggle);
   const focus = useRef(new Animated.Value(0)).current;
@@ -44,11 +46,12 @@ export const AppTextField = forwardRef(function AppTextField(
   });
   return (
     <View style={styles.wrap}>
-      <Text style={styles.label}>{label}</Text>
+      <Text style={[styles.label, rtlText]}>{label}</Text>
 
       <Animated.View
         style={[
           styles.field,
+          rtlRow,
           { borderColor, backgroundColor },
           focused && !error ? styles.fieldFocused : null,
         ]}
@@ -61,7 +64,7 @@ export const AppTextField = forwardRef(function AppTextField(
 
         <TextInput
           ref={ref}
-          style={styles.input}
+          style={[styles.input, rtlText]}
           placeholderTextColor={colors.textMuted}
           secureTextEntry={secureToggle ? hidden : inputProps.secureTextEntry}
           onFocus={(e) => {
@@ -87,7 +90,7 @@ export const AppTextField = forwardRef(function AppTextField(
             onPress={() => setHidden((v) => !v)}
             hitSlop={10}
             accessibilityRole="button"
-            accessibilityLabel={hidden ? 'Show password' : 'Hide password'}
+            accessibilityLabel={hidden ? t.showPassword : t.hidePassword}
           >
             <Ionicons
               name={hidden ? 'eye-outline' : 'eye-off-outline'}
