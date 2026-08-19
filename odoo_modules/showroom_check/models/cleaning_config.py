@@ -497,6 +497,27 @@ class CleaningConfig(models.Model):
             if reference.image
         }
 
+    def _askable_directions(self):
+        """Which directions may be photographed at all, in order.
+
+        The originals are the specification: a direction with no original has
+        nothing to compare a photograph against, so a photograph of it can
+        never be scored and is not worth keeping.
+
+        Separate from _required_directions below because "may be sent" and
+        "must be sent" are different questions. require_photos answers only the
+        second, so deciding what to KEEP by the requirement would throw away
+        every photograph in every office that has not switched it on yet -
+        which is every office to begin with.
+        """
+        self.ensure_one()
+        return [
+            reference.direction
+            for reference in self.reference_image_ids.sorted(
+                lambda r: (r.sequence, r.id))
+            if reference.image
+        ]
+
     def _required_directions(self):
         """Which directions a round has to photograph.
 
@@ -510,14 +531,7 @@ class CleaningConfig(models.Model):
         about what is being asked for.
         """
         self.ensure_one()
-        if not self.require_photos:
-            return []
-        return [
-            reference.direction
-            for reference in self.reference_image_ids.sorted(
-                lambda r: (r.sequence, r.id))
-            if reference.image
-        ]
+        return self._askable_directions() if self.require_photos else []
 
     def _direction_payload(self):
         """The ordered directions to photograph, for the client.
@@ -528,11 +542,18 @@ class CleaningConfig(models.Model):
         The reference URL carries the row's write date, because an original can
         be replaced - unlike a recording, which is written once and is why the
         video route may declare itself immutable.
+
+        Directions with no original are left out entirely. Such a row has no
+        picture to show beside the camera and no way to be scored afterwards,
+        so listing it does nothing but invite a client to ask somebody to
+        photograph a view the server is going to discard.
         """
         self.ensure_one()
         rows = []
         for reference in self.reference_image_ids.sorted(
                 lambda r: (r.sequence, r.id)):
+            if not reference.image:
+                continue
             stamp = reference.write_date and int(reference.write_date.timestamp())
             rows.append({
                 'key': reference.direction,
@@ -540,11 +561,13 @@ class CleaningConfig(models.Model):
                     reference.direction, reference.direction),
                 'sequence': reference.sequence,
                 'instructions': reference.instructions or '',
-                'has_reference': bool(reference.image),
+                # Always true now that the rest are filtered out. Kept on the
+                # wire so a client that tests it carries on working.
+                'has_reference': True,
                 'reference_id': reference.id,
                 'reference_url': (
                     '/web/image/cleaning.reference.image/%s/image?unique=%s'
-                    % (reference.id, stamp or 0)) if reference.image else False,
+                    % (reference.id, stamp or 0)),
             })
         return rows
 
@@ -633,6 +656,11 @@ class CleaningConfig(models.Model):
             'require_photos': self.require_photos,
             'min_photo_bytes': MIN_PHOTO_BYTES,
             'directions': self._direction_payload(),
+            # Both questions answered explicitly. "May I send this?" and "must
+            # I send this?" have different answers whenever require_photos is
+            # off, and a client left to work the first one out from the second
+            # would stop sending photographs the moment it was switched off.
+            'askable_directions': self._askable_directions(),
             'required_directions': self._required_directions(),
             'match_warn_threshold': self.match_warn_threshold,
             'match_alert_threshold': self.match_alert_threshold,

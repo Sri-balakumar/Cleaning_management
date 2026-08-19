@@ -168,25 +168,49 @@ class CleaningManagementController(http.Controller):
                 blob = b''
                 has_video = False
 
+            # Named by the manager's own wording, not by the direction key -
+            # "Bags area" means something to the person holding the phone and
+            # "left" often does not. _ensure_reference_rows guarantees a row per
+            # direction, so a view with no picture on it still has a name.
+            labels = {
+                reference.direction: reference.name
+                for reference in config.reference_image_ids
+            }
+
             # --- the photographs ------------------------------------------
+            #
+            # Kept only where there is an original to compare against. A
+            # photograph of a view with no original can never be scored - not
+            # today and not after somebody adds the original next month, because
+            # the shot records which original it was taken against and that
+            # would be nothing. Storing it would leave a picture nobody can act
+            # on sitting in every round for as long as the retention setting
+            # says, reading in the form as a comparison that failed.
+            #
+            # Tested against the ASKABLE directions, never the required ones:
+            # required is empty whenever require_photos is off, which would
+            # discard every photograph from every office that has not switched
+            # the requirement on - which is all of them to begin with.
+            askable = set(config._askable_directions())
             photos = {}
+            ignored = []
             for key in DIRECTION_KEYS:
                 part = request.httprequest.files.get('photo_%s' % key)
                 if not part:
                     continue
                 data = part.read() or b''
-                if len(data) >= MIN_PHOTO_BYTES:
-                    photos[key] = (data, part.mimetype or 'image/jpeg')
+                if len(data) < MIN_PHOTO_BYTES:
+                    continue
+                if key not in askable:
+                    # Read off the wire and dropped. Not a refusal: the round
+                    # itself is fine, and somebody who photographed one view too
+                    # many has done nothing wrong.
+                    ignored.append(key)
+                    continue
+                photos[key] = (data, part.mimetype or 'image/jpeg')
 
             missing = [key for key in required if key not in photos]
             if missing:
-                # Named by the manager's own wording, not by the direction key -
-                # "Bags area" means something to the person holding the phone
-                # and "left" often does not.
-                labels = {
-                    reference.direction: reference.name
-                    for reference in config.reference_image_ids
-                }
                 return self._json_error('missing_photos', request.env._(
                     "These views were not photographed, or the pictures did "
                     "not arrive: %(views)s.\n\n"
@@ -271,12 +295,33 @@ class CleaningManagementController(http.Controller):
                     for key, (data, part_mimetype) in photos.items()
                 ])
 
+            # Said out loud rather than dropped in silence. Somebody who took
+            # the trouble to photograph a fifth view deserves to know it was not
+            # kept and why - otherwise they carry on taking it every morning,
+            # and a manager who sees only three pictures thinks the app is
+            # broken. A warning beside a successful round, never an error: the
+            # round itself is complete.
+            warning = False
+            if ignored:
+                warning = request.env._(
+                    "These views were not saved: %(views)s.\n\n"
+                    "No original photograph has been set for them, so there is "
+                    "nothing to compare them against. The rest of your round "
+                    "went through. If they should be checked, ask a manager to "
+                    "add their originals under Configuration > Settings.",
+                    views=', '.join(labels.get(key, key) for key in ignored))
+
             return request.make_json_response({
                 'ok': True,
                 'recording_id': recording.id,
                 'file_size': recording.file_size,
                 'filename': filename if has_video else False,
                 'has_video': has_video,
+                'ignored_photos': [
+                    {'key': key, 'label': labels.get(key, key)}
+                    for key in ignored
+                ],
+                'warning': warning,
                 'shot_count': recording.shot_count,
                 'match_score': recording.match_score,
                 'match_level': recording.match_level,

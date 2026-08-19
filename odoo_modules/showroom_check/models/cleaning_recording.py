@@ -6,7 +6,7 @@ from odoo import api, fields, models
 from odoo.exceptions import AccessError, UserError, ValidationError
 
 from .cleaning_config import (
-    DIRECTION_DEFAULT_LABEL, DIRECTION_SEQUENCE, MATCH_LEVELS, MIN_PHOTO_BYTES,
+    DIRECTION_SEQUENCE, MATCH_LEVELS, MIN_PHOTO_BYTES,
     format_float_time,
 )
 
@@ -429,6 +429,13 @@ class CleaningRecording(models.Model):
         original, and each carries its own verdict. One method serving both
         would be a list whose positional meaning changes with the caller, which
         is precisely the shape of the frame_10 sorting bug.
+
+        A direction with no original is skipped rather than stored unscored.
+        The upload route already drops those and tells the sender so, and this
+        is the same rule stated where it cannot be got round: a shot records
+        WHICH original it was taken against, so one created without an original
+        can never be scored - not now, and not by action_recompute_match after
+        somebody adds the missing original next month.
         """
         self.ensure_one()
         Shot = self.env['cleaning.recording.shot']
@@ -439,6 +446,8 @@ class CleaningRecording(models.Model):
             if not blob or len(blob) < MIN_PHOTO_BYTES:
                 continue
             reference = references.get(direction)
+            if not reference:
+                continue
             existing = self.shot_ids.filtered(
                 lambda s, d=direction: s.direction == d)
             if existing:
@@ -446,11 +455,10 @@ class CleaningRecording(models.Model):
             shot = Shot.create({
                 'recording_id': self.id,
                 'direction': direction,
-                'name': (reference.name if reference
-                         else DIRECTION_DEFAULT_LABEL.get(direction, direction)),
+                'name': reference.name,
                 'sequence': DIRECTION_SEQUENCE.get(direction, 50),
-                'reference_image_id': reference.id if reference else False,
-                'reference_write_date': reference.write_date if reference else False,
+                'reference_image_id': reference.id,
+                'reference_write_date': reference.write_date,
             })
             shot._attach_image(blob, filename, mimetype)
             stored |= shot

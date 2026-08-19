@@ -1,4 +1,8 @@
+import base64
+import io
 from datetime import date, datetime
+
+from PIL import Image
 
 from odoo.exceptions import AccessError, ValidationError
 from odoo.tests.common import TransactionCase, tagged
@@ -507,4 +511,91 @@ class TestCleaningManagement(TransactionCase):
 
         self.config.video_quality = 'low'
         self.assertLess(self.config.estimated_size_mb, 6.0)
+
+    # ------------------------------------------------------------------
+    # The photographs, and the views that have no original
+    # ------------------------------------------------------------------
+    def _jpeg(self, seed=0):
+        """A real JPEG, comfortably over MIN_PHOTO_BYTES.
+
+        Genuinely decodable rather than padding, because everything under test
+        here decodes it: _attach_image resizes it, and the comparison reads it
+        again to score it. The noise is what carries it past the 2048-byte
+        floor - a flat colour compresses to a few hundred bytes, which the
+        upload would rightly refuse as a half-written picture.
+        """
+        image = Image.new('RGB', (320, 240))
+        pixels = image.load()
+        for x in range(320):
+            for y in range(240):
+                pixels[x, y] = ((x * 7 + seed) % 256, (y * 11) % 256,
+                                (x + y + seed) % 256)
+        buffer = io.BytesIO()
+        image.save(buffer, format='JPEG', quality=95)
+        return buffer.getvalue()
+
+    def _set_original(self, direction):
+        """Put an original on one of the four rows the config already has."""
+        reference = self.config.reference_image_ids.filtered(
+            lambda r, d=direction: r.direction == d)
+        reference.write({'image': base64.b64encode(self._jpeg())})
+        return reference
+
+    def test_a_photograph_with_no_original_is_not_stored(self):
+        """Somebody photographs the back as well; there is no back original.
+
+        It is dropped rather than kept unscored. A shot records which original
+        it was taken against, so one stored without an original could never be
+        scored - not now, and not after a manager adds the back original later.
+        Keeping it would leave a picture nobody can act on in every round.
+        """
+        self._set_original('front')
+        recording = self.env['cleaning.recording'].create(
+            self._recording_values(datetime(2026, 8, 17, 3, 40)))
+        blob = self._jpeg()
+
+        recording._store_direction_shots([
+            ('front', blob, 'image/jpeg', 'front.jpg'),
+            ('back', blob, 'image/jpeg', 'back.jpg'),
+        ])
+
+        self.assertEqual(recording.shot_ids.mapped('direction'), ['front'])
+        self.assertEqual(recording.shot_count, 1)
+        # The round itself is untouched: the extra view is not a failure.
+        self.assertTrue(recording.exists())
+
+    def test_photographs_are_kept_while_the_requirement_is_off(self):
+        """require_photos says what MUST be sent, never what may be kept.
+
+        Deciding what to keep by _required_directions would discard every
+        photograph in every office that has not switched the requirement on -
+        which is how every office starts, and the setting is off by default.
+        """
+        self.assertFalse(self.config.require_photos)
+        self._set_original('front')
+        self.assertEqual(self.config._required_directions(), [])
+        self.assertEqual(self.config._askable_directions(), ['front'])
+
+        recording = self.env['cleaning.recording'].create(
+            self._recording_values(datetime(2026, 8, 17, 3, 40)))
+        recording._store_direction_shots(
+            [('front', self._jpeg(), 'image/jpeg', 'front.jpg')])
+
+        shot = recording.shot_ids
+        self.assertEqual(len(shot), 1)
+        self.assertFalse(shot.match_error)
+        self.assertTrue(shot.matched_at, "stored is not enough - it was scored")
+
+    def test_the_client_is_only_offered_views_that_have_an_original(self):
+        """So nobody is asked for a picture the server is going to drop."""
+        self._set_original('front')
+        self._set_original('left')
+
+        settings = self.env['cleaning.config'].get_dashboard_state()['settings']
+
+        self.assertEqual(settings['askable_directions'], ['front', 'left'])
+        self.assertEqual([row['key'] for row in settings['directions']],
+                         ['front', 'left'])
+        self.assertTrue(all(row['reference_url']
+                            for row in settings['directions']))
 
