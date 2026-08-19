@@ -174,6 +174,24 @@ export const analyseWithAi = (baseUrl, recordingId) =>
   });
 
 /**
+ * Rounds that were scheduled and never recorded.
+ *
+ * Manager-only: the ACL grants read on cleaning.slot.missed to that group
+ * alone, so this is refused server-side for anybody else and the app does not
+ * repeat the check.
+ *
+ * Today is deliberately absent from the model itself -- a round that has not
+ * happened yet has not been missed, and it shows on the dashboard instead.
+ */
+export const fetchMissedRounds = (baseUrl, { limit = 120 } = {}) =>
+  rpc(baseUrl, '/web/dataset/call_kw', {
+    model: 'cleaning.slot.missed',
+    method: 'search_read',
+    args: [[], ['id', 'slot_date', 'slot_id', 'hour_from', 'hour_to', 'day_period']],
+    kwargs: { limit, order: 'slot_date desc, hour_from' },
+  });
+
+/**
  * Delete recordings. Managers only -- the ACL withholds unlink from a regular
  * user, so this is refused server-side even if the interface ever offered it.
  *

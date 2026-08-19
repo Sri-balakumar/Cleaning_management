@@ -70,7 +70,7 @@ export function PrimaryButton({
             colors={colors.gradientButton}
             start={{ x: 0, y: 0 }}
             end={{ x: 1, y: 0 }}
-            style={[styles.base, styles.gradient]}
+            style={[styles.base, styles.gradient, inert && styles.flat]}
           >
             {content}
           </LinearGradient>
@@ -109,6 +109,12 @@ const styles = StyleSheet.create({
   ghost: { backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border },
   danger: { backgroundColor: colors.dangerBg, borderWidth: 1, borderColor: colors.dangerBorder },
   inert: { opacity: 0.55 },
+  // Goes on with `inert`. Fading the button puts it and its elevation shadow
+  // into one composited layer, and the shadow then paints as a pale band
+  // straight across the face rather than as a drop behind it. The solid
+  // variants never showed it because they carry no elevation. A button nobody
+  // can press has no business looking raised anyway.
+  flat: { shadowOpacity: 0, elevation: 0 },
   label: { fontSize: 16, fontWeight: '700', color: colors.white, letterSpacing: 0.2 },
   labelAlt: { color: colors.primary },
   labelDanger: { color: colors.danger },

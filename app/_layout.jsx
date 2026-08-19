@@ -69,7 +69,9 @@ export default function RootLayout() {
             name="recorder"
             options={{ presentation: 'fullScreenModal', animation: 'slide_from_bottom' }}
           />
+          <Stack.Screen name="missed" options={{ animation: 'slide_from_right' }} />
           <Stack.Screen name="settings/index" options={{ animation: 'slide_from_right' }} />
+          <Stack.Screen name="settings/rounds" options={{ animation: 'slide_from_right' }} />
           <Stack.Screen name="settings/ai" options={{ animation: 'slide_from_right' }} />
           <Stack.Screen
             name="comparison/[id]"

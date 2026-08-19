@@ -68,14 +68,18 @@ function RoundsScreen() {
     });
   }, [confirm, router, signOut, t]);
 
-  // Manager-only. The gear mirrors the web's Configuration menu, which holds
-  // exactly these two entries.
+  // Manager-only, mirroring the web's Configuration menu.
   const openConfiguration = useCallback(() => {
     confirm({
       title: t.configuration,
       icon: 'settings-outline',
       actions: [
         { label: t.settings, icon: 'options-outline', onPress: () => router.push('/settings') },
+        {
+          label: t.configRounds,
+          icon: 'time-outline',
+          onPress: () => router.push('/settings/rounds'),
+        },
         {
           label: t.sectionAiReview,
           icon: 'sparkles-outline',
@@ -238,12 +242,20 @@ function RoundsScreen() {
                 caption={t.statRecorded.toUpperCase()}
               />
               {data.today_missed > 0 ? (
-                <View style={[styles.missedChip, rtlRow]}>
+                <Pressable
+                  onPress={() => data.is_manager && router.push('/missed')}
+                  disabled={!data.is_manager}
+                  accessibilityRole={data.is_manager ? 'button' : 'text'}
+                  style={[styles.missedChip, rtlRow]}
+                >
                   <View style={styles.missedDot} />
                   <Text style={styles.missedText}>
                     {data.today_missed} {t.statMissed}
                   </Text>
-                </View>
+                  {data.is_manager ? (
+                    <Ionicons name="chevron-forward" size={13} color={colors.white} />
+                  ) : null}
+                </Pressable>
               ) : null}
             </View>
           ) : null}

@@ -65,6 +65,10 @@ export const writeConfig = (baseUrl, id, values) =>
 export const fetchSlots = (baseUrl, configId) =>
   call(baseUrl, 'cleaning.slot', 'search_read', [[['config_id', '=', configId]], SLOT_FIELDS], {
     order: 'sequence, hour_from, id',
+    // Archived rounds come back too. The Rounds screen lists them faded with
+    // their switch off; without this that switch would be a one-way door,
+    // there being no Archived filter here to find them again with.
+    context: { active_test: false },
   });
 
 export const createSlot = (baseUrl, values) =>

@@ -6,22 +6,15 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { AppError } from '../../src/api/errors';
 import {
-  WEEKDAYS,
-  createSlot,
-  deleteSlot,
   fetchConfig,
   fetchReferenceImages,
-  fetchSlots,
-  formatFloatTime,
   readUserNames,
   searchUsers,
   writeConfig,
   writeReferenceImage,
-  writeSlot,
 } from '../../src/api/config';
 import { useAuth } from '../../src/auth/AuthContext';
 import { RequireAuth } from '../../src/auth/RequireAuth';
-import { useDialog } from '../../src/components/AppDialog';
 import { ErrorBanner } from '../../src/components/ErrorBanner';
 import { GradientBackground, GradientOrbs } from '../../src/components/GradientBackground';
 import { InfoCard } from '../../src/components/InfoRow';
@@ -32,7 +25,6 @@ import {
   OptionSheet,
   SelectRow,
   TextRow,
-  TimeRow,
   ToggleRow,
 } from '../../src/components/SettingRows';
 import { ShowroomViews } from '../../src/components/ShowroomViews';
@@ -80,12 +72,10 @@ function SettingsScreen() {
   const router = useRouter();
   const { connection } = useAuth();
   const { t, rtlRow, rtlText } = useT();
-  const { confirm } = useDialog();
 
   const [config, setConfig] = useState(null);
   // What was loaded, kept so "has anything changed?" has something to ask.
   const [baseline, setBaseline] = useState(null);
-  const [slots, setSlots] = useState([]);
   const [views, setViews] = useState([]);
   const [userNames, setUserNames] = useState({});
   const [loading, setLoading] = useState(true);
@@ -104,12 +94,10 @@ function SettingsScreen() {
       setConfig(cfg);
       setBaseline(cfg);
       if (cfg) {
-        const [rows, users, originals] = await Promise.all([
-          fetchSlots(connection.baseUrl, cfg.id),
+        const [users, originals] = await Promise.all([
           readUserNames(connection.baseUrl, cfg.allowed_user_ids || []),
           fetchReferenceImages(connection.baseUrl, cfg.id),
         ]);
-        setSlots(rows || []);
         setUserNames(Object.fromEntries((users || []).map((u) => [u.id, u.name])));
         setViews(originals || []);
       }
@@ -165,38 +153,6 @@ function SettingsScreen() {
   }, [baseline, config]);
 
   const patchView = (id, values) => run(() => writeReferenceImage(connection.baseUrl, id, values));
-
-  const addRound = () =>
-    run(() =>
-      createSlot(connection.baseUrl, {
-        config_id: config.id,
-        name: t.newRound,
-        day_period: 'morning',
-        hour_from: 9,
-        hour_to: 10,
-        mon: true, tue: true, wed: true, thu: true, fri: true, sat: false, sun: false,
-      }),
-    );
-
-  const patchRound = (id, values) => run(() => writeSlot(connection.baseUrl, id, values));
-
-  const removeRound = (round) =>
-    confirm({
-      title: t.deleteRound,
-      message: t.deleteRoundBody,
-      icon: 'trash-outline',
-      tone: 'danger',
-      actions: [
-        {
-          label: t.delete,
-          style: 'destructive',
-          // A round with recordings against it is refused by the restrict rule
-          // on the recording's slot_id; `run` shows that message unchanged.
-          onPress: () => void run(() => deleteSlot(connection.baseUrl, round.id)),
-        },
-        { label: t.cancel, style: 'cancel' },
-      ],
-    });
 
   // In here rather than at module scope so the labels follow the language.
   const tabs = useMemo(
@@ -302,27 +258,24 @@ function SettingsScreen() {
                 hint={t.timezoneHint}
                 value={config.timezone}
                 options={timezoneOptions}
-                onChange={(v) => set({ timezone: v })}
+                onChange={(v) => {
+                  set({ timezone: v });
+                  void run(() => writeConfig(connection.baseUrl, config.id, { timezone: v }));
+                }}
                 last
               />
             </InfoCard>
 
-            {slots.map((round) => (
-              <RoundEditor
-                key={round.id}
-                round={round}
-                onPatch={patchRound}
-                onRemove={removeRound}
-                disabled={saving}
-              />
-            ))}
+            {/* The rounds themselves are a screen of their own, the way the
+                web keeps them. A way through to it, not a second editor.
 
+                Filled rather than ghost: a ghost button is a white face on the
+                grey body, directly under a white card, and reads as more of
+                the card rather than as the one thing on this tab to press. */}
             <PrimaryButton
-              label={t.addRound}
-              icon="add"
-              variant="ghost"
-              onPress={addRound}
-              disabled={saving}
+              label={t.configRounds}
+              icon="time-outline"
+              onPress={() => router.push('/settings/rounds')}
               style={styles.addBtn}
             />
             </>
@@ -471,16 +424,22 @@ function SettingsScreen() {
             </InfoCard>
             ) : null}
 
-            {/* On every tab, and correct on every tab: saveConfig writes the
-                whole record from `config`, which holds the fields of the tabs
-                that are not on screen just as much as the one that is. */}
-            <PrimaryButton
-              label={t.save}
-              icon="save-outline"
-              onPress={saveConfig}
-              loading={saving}
-              disabled={!dirty}
-            />
+            {/* Daily rounds has nothing left to save -- the timezone writes
+                itself and the rounds are a screen of their own -- so the button
+                is not shown there. It still appears if something typed on
+                another tab is unsaved, because saveConfig writes the whole
+                record from `config`, which holds the fields of the tabs that
+                are not on screen just as much as the one that is; hiding it
+                over an unsaved change would strand it. */}
+            {tab === 'schedule' && !dirty ? null : (
+              <PrimaryButton
+                label={t.save}
+                icon="save-outline"
+                onPress={saveConfig}
+                loading={saving}
+                disabled={!dirty}
+              />
+            )}
           </>
         ) : null}
       </ScrollView>
@@ -496,78 +455,6 @@ function SettingsScreen() {
         }}
         onClose={() => setTzOpen(false)}
       />
-    </View>
-  );
-}
-
-/** One round. Times and weekdays save on change; the name saves on blur. */
-function RoundEditor({ round, onPatch, onRemove, disabled }) {
-  const { t, rtlRow, rtlText } = useT();
-  const [name, setName] = useState(round.name || '');
-
-  return (
-    <View style={styles.round}>
-      <View style={[styles.roundHead, rtlRow]}>
-        <Text style={[styles.roundWindow, rtlText]}>
-          {formatFloatTime(round.hour_from)} → {formatFloatTime(round.hour_to)}
-        </Text>
-        <Pressable
-          onPress={() => onRemove(round)}
-          hitSlop={10}
-          disabled={disabled}
-          accessibilityRole="button"
-          accessibilityLabel={t.delete}
-        >
-          <Ionicons name="trash-outline" size={18} color={colors.danger} />
-        </Pressable>
-      </View>
-
-      <TextRow
-        label={t.roundName}
-        value={name}
-        onChange={setName}
-        placeholder={t.roundName}
-      />
-      {name !== round.name ? (
-        <PrimaryButton
-          label={t.save}
-          variant="ghost"
-          onPress={() => onPatch(round.id, { name })}
-          style={styles.inlineSave}
-        />
-      ) : null}
-
-      <TimeRow
-        label={t.startsAt}
-        value={round.hour_from}
-        onChange={(v) => onPatch(round.id, { hour_from: v })}
-      />
-      <TimeRow
-        label={t.endsAt}
-        value={round.hour_to}
-        onChange={(v) => onPatch(round.id, { hour_to: v })}
-      />
-
-      <View style={styles.daysBlock}>
-        <Text style={[styles.label, rtlText]}>{t.weekdays}</Text>
-        <View style={[styles.days, rtlRow]}>
-          {WEEKDAYS.map((day) => {
-            const on = !!round[day];
-            return (
-              <Pressable
-                key={day}
-                onPress={() => onPatch(round.id, { [day]: !on })}
-                disabled={disabled}
-                style={[styles.day, on && styles.dayOn]}
-                accessibilityRole="button"
-                accessibilityState={{ selected: on }}
-              >
-                <Text style={[styles.dayText, on && styles.dayTextOn]}>{t[`day_${day}`]}</Text>
-              </Pressable>
-            );
-          })}
-        </View>
-      </View>
     </View>
   );
 }
@@ -659,38 +546,7 @@ const styles = StyleSheet.create({
   emptyIcon: { fontSize: 40 },
   emptyTitle: { ...typography.title },
 
-  round: {
-    backgroundColor: colors.surface,
-    borderRadius: radius.lg,
-    borderWidth: 1,
-    borderColor: colors.border,
-    paddingHorizontal: spacing.lg,
-    marginBottom: spacing.md,
-  },
-  roundHead: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingTop: spacing.lg,
-  },
-  roundWindow: { fontSize: 15, fontWeight: '800', color: colors.text },
   inlineSave: { marginBottom: spacing.md },
-  daysBlock: { paddingVertical: spacing.lg, gap: spacing.sm },
-  days: { flexDirection: 'row', gap: spacing.xs, flexWrap: 'wrap' },
-  day: {
-    width: 38,
-    height: 34,
-    borderRadius: radius.sm,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: colors.surfaceAlt,
-    borderWidth: 1,
-    borderColor: colors.border,
-  },
-  dayOn: { backgroundColor: colors.primary, borderColor: colors.primary },
-  dayText: { fontSize: 11, fontWeight: '700', color: colors.textSecondary },
-  dayTextOn: { color: colors.white },
-
   addBtn: { marginBottom: spacing.md },
   label: { ...typography.label },
   hint: { ...typography.caption, fontSize: 11 },
