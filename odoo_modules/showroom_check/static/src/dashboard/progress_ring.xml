@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<templates xml:space="preserve">
+
+    <t t-name="showroom_check.ProgressRing">
+        <div class="cm-ring" t-attf-style="width:{{size}}px;height:{{size}}px;">
+            <svg t-att-width="size" t-att-height="size" aria-hidden="true">
+                <circle t-att-cx="centre" t-att-cy="centre" t-att-r="radius"
+                        class="cm-ring-track" t-att-stroke-width="stroke" fill="none"/>
+
+                <circle t-if="missedFraction > 0"
+                        t-att-cx="centre" t-att-cy="centre" t-att-r="radius"
+                        class="cm-ring-missed" t-att-stroke-width="stroke" fill="none"
+                        t-att-stroke-dasharray="circumference"
+                        t-att-stroke-dashoffset="missedOffset"
+                        stroke-linecap="round"
+                        t-att-transform="missedTransform"/>
+
+                <circle t-if="doneFraction > 0"
+                        t-att-cx="centre" t-att-cy="centre" t-att-r="radius"
+                        class="cm-ring-done" t-att-stroke-width="stroke" fill="none"
+                        t-att-stroke-dasharray="circumference"
+                        t-att-stroke-dashoffset="doneOffset"
+                        stroke-linecap="round"
+                        t-att-transform="doneTransform"/>
+            </svg>
+
+            <div class="cm-ring-centre">
+                <div class="cm-ring-value">
+                    <t t-esc="props.done"/><span class="cm-ring-total">/<t t-esc="props.total"/></span>
+                </div>
+                <div t-if="props.caption" class="cm-ring-caption"><t t-esc="props.caption"/></div>
+            </div>
+        </div>
+    </t>
+
+</templates>

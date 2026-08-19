@@ -4,6 +4,8 @@ import { useService } from "@web/core/utils/hooks";
 import { browser } from "@web/core/browser/browser";
 
 import { useSlotClock } from "./use_slot_clock";
+import { OpenRoundCard } from "./open_round_card";
+import { ProgressRing } from "./progress_ring";
 import { SlotCard } from "./slot_card";
 import { RecorderDialog } from "../recorder/recorder_dialog";
 import { DiagnosticsPanel } from "../diagnostics/diagnostics_panel";
@@ -11,7 +13,7 @@ import { getCapabilities } from "../recorder/media_support";
 
 export class CleaningDashboard extends Component {
     static template = "showroom_check.CleaningDashboard";
-    static components = { SlotCard, DiagnosticsPanel };
+    static components = { OpenRoundCard, ProgressRing, SlotCard, DiagnosticsPanel };
     static props = ["*"];
 
     setup() {
@@ -35,12 +37,92 @@ export class CleaningDashboard extends Component {
         return this.clock.state.data || {};
     }
 
+    /** Today's rounds, less the one the hero is already showing. */
     get slots() {
-        return this.data.slots || [];
+        const rows = this.data.slots || [];
+        const active = this.active;
+        return active ? rows.filter((row) => row.id !== active.id) : rows;
     }
 
-    get activeSlot() {
-        return this.data.active_slot || null;
+    /**
+     * The open round, unless it has already been recorded -- in which case
+     * there is nothing left to do about it and it belongs in the list below
+     * with the rest of the day.
+     */
+    get active() {
+        const slot = this.data.active_slot;
+        return slot && !slot.already_recorded ? slot : null;
+    }
+
+    get upNext() {
+        return !this.active && this.data.next_slot ? this.data.next_slot : null;
+    }
+
+    /**
+     * Which of the three cards the top of the page shows, or none at all.
+     *
+     * 'done' needs today_total: a day with no rounds at all has not been
+     * finished, it was never started, and the empty state says so instead.
+     */
+    get heroMode() {
+        if (this.active) {
+            return "open";
+        }
+        if (this.upNext) {
+            return "next";
+        }
+        return this.data.today_total ? "done" : null;
+    }
+
+    /**
+     * undefined rather than null when there is no round: 'done' mode has none,
+     * and OWL's prop validation rejects a null where an optional Object was
+     * declared while letting an absent one through.
+     */
+    get heroRound() {
+        return this.active || this.upNext || undefined;
+    }
+
+    /**
+     * The hero's own gate: the server's answer AND this browser's.
+     *
+     * can_record alone would offer a button that cannot work on a machine with
+     * no camera API, which is the one case the server cannot know about.
+     */
+    get heroCanRecord() {
+        return Boolean(
+            this.capabilities.supported && this.heroRound && this.heroRound.can_record
+        );
+    }
+
+    get heroBlockedMessage() {
+        if (!this.capabilities.supported) {
+            return "Recording is not available in this browser.";
+        }
+        return this.data.deny_message || "";
+    }
+
+    /**
+     * A round with the video switched off is photographs and nothing else, so
+     * the button must not promise a recording.
+     *
+     * Tested against `false` rather than falsiness, so a server too old to send
+     * the flag keeps saying "Record now" instead of quietly renaming the button
+     * on every dashboard.
+     */
+    get capturesOnly() {
+        return (this.data.settings || {}).video_enabled === false;
+    }
+
+    get greeting() {
+        const hour = new Date().getHours();
+        if (hour < 12) {
+            return "Good morning";
+        }
+        if (hour < 18) {
+            return "Good afternoon";
+        }
+        return "Good evening";
     }
 
     /**
@@ -150,6 +232,20 @@ export class CleaningDashboard extends Component {
 
     openSettings() {
         this.action.doAction("showroom_check.action_cleaning_config_open");
+    }
+
+    /**
+     * Which rounds were missed, rather than only how many.
+     *
+     * Manager-only, and the ACL says so: cleaning.slot.missed is readable by
+     * that group alone, so the figure is only made clickable for them rather
+     * than sending anybody else into an access error.
+     */
+    openMissed() {
+        if (!this.data.is_manager) {
+            return;
+        }
+        this.action.doAction("showroom_check.action_cleaning_slot_missed");
     }
 
     toggleDiagnostics() {

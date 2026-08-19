@@ -11,7 +11,13 @@
                         <i class="fa fa-clock-o me-1"/><t t-esc="props.round.window_label"/>
                     </div>
                 </div>
-                <span class="cm-slot-status"><t t-esc="statusLabel"/></span>
+                <span t-att-class="badgeClass"><t t-esc="statusLabel"/></span>
+            </div>
+
+            <!-- Whatever the manager wrote on the round: which rooms, what to
+                 look out for. It is on the record, so it is shown. -->
+            <div t-if="props.round.note" class="cm-slot-note">
+                <t t-esc="props.round.note"/>
             </div>
 
             <!-- Already recorded -->
@@ -50,7 +56,7 @@
                 <button t-if="props.canRecord"
                         class="btn btn-primary btn-lg w-100 mt-2"
                         t-on-click="() => this.props.onRecord(props.round)">
-                    <i class="fa fa-video-camera me-2"/> Record now
+                    <i t-att-class="actionIcon"/><t t-esc="actionLabel"/>
                 </button>
                 <div t-else="" class="cm-slot-line text-muted mt-2">
                     <i class="fa fa-lock me-1"/>
@@ -64,7 +70,7 @@
                     Opens in <strong><t t-esc="openCountdown"/></strong>
                 </div>
                 <button class="btn btn-secondary btn-lg w-100 mt-2" disabled="disabled">
-                    <i class="fa fa-video-camera me-2"/> Record
+                    <i t-att-class="actionIcon"/><t t-esc="upcomingLabel"/>
                 </button>
             </div>
 

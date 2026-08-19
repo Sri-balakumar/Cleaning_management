@@ -4,35 +4,69 @@
     <t t-name="showroom_check.CleaningDashboard">
         <div class="cm-dashboard o_action">
 
-            <div class="cm-header">
-                <div>
-                    <h2 class="cm-title">Cleaning</h2>
-                    <div t-if="data.today" class="text-muted">
-                        <t t-esc="data.today"/>
-                        <span t-if="data.timezone" class="ms-2 small">
-                            (times shown for <t t-esc="data.timezone"/>)
-                        </span>
+            <!--
+                The header the app shows, on the same gradient: who is here,
+                what day it is in the office's own timezone, and the day's
+                progress as one ring rather than three separate figures to add
+                up. The actions sit on it because there is nowhere better and
+                they are not what anybody came to the page for.
+            -->
+            <div class="cm-hero-header">
+                <div class="cm-header">
+                    <div>
+                        <div class="cm-greeting"><t t-esc="greeting"/></div>
+                        <div t-if="data.today" class="cm-today">
+                            <t t-esc="data.today"/>
+                            <t t-if="data.timezone"> · <t t-esc="data.timezone"/></t>
+                        </div>
+                    </div>
+                    <!-- Centred across the header, laid over it rather than
+                         placed in the flow, so it stays dead centre whatever is
+                         to either side of it. Non-interactive, so it cannot
+                         swallow a click meant for a button underneath. The same
+                         mark the app puts at the top of its dashboard, at the
+                         same height and with nothing behind it. -->
+                    <img src="/showroom_check/static/img/logo-369-mark.png"
+                         class="cm-mark" alt="369"/>
+
+                    <div class="cm-header-actions">
+                        <button t-if="env.debug" class="btn btn-sm cm-header-btn"
+                                t-on-click="() => this.toggleDiagnostics()">
+                            <i class="fa fa-stethoscope me-1"/> Diagnostics
+                        </button>
+                        <!-- Always offered, open round or not: checking the camera
+                             must never cost the day's real recording. -->
+                        <button t-if="capabilities.supported"
+                                class="btn btn-sm cm-header-btn"
+                                t-on-click="() => this.testCamera()">
+                            <i class="fa fa-video-camera me-1"/> Test camera
+                        </button>
+                        <button class="btn btn-sm cm-header-btn"
+                                t-on-click="() => this.reload()">
+                            <i class="fa fa-refresh me-1"/> Refresh
+                        </button>
+                        <button t-if="data.is_manager" class="btn btn-sm cm-header-btn"
+                                t-on-click="() => this.openSettings()">
+                            <i class="fa fa-cog me-1"/> Settings
+                        </button>
                     </div>
                 </div>
-                <div class="cm-header-actions">
-                    <button t-if="env.debug" class="btn btn-sm btn-outline-secondary"
-                            t-on-click="() => this.toggleDiagnostics()">
-                        <i class="fa fa-stethoscope me-1"/> Diagnostics
-                    </button>
-                    <!-- Always offered, open round or not: checking the camera
-                         must never cost the day's real recording. -->
-                    <button t-if="capabilities.supported"
-                            class="btn btn-sm btn-outline-secondary"
-                            t-on-click="() => this.testCamera()">
-                        <i class="fa fa-video-camera me-1"/> Test camera
-                    </button>
-                    <button class="btn btn-sm btn-outline-secondary"
-                            t-on-click="() => this.reload()">
-                        <i class="fa fa-refresh me-1"/> Refresh
-                    </button>
-                    <button t-if="data.is_manager" class="btn btn-sm btn-outline-primary"
-                            t-on-click="() => this.openSettings()">
-                        <i class="fa fa-cog me-1"/> Settings
+
+                <div t-if="!state.loading and !state.error and data.ok" class="cm-summary">
+                    <ProgressRing done="data.today_done"
+                                  total="data.today_total"
+                                  missed="data.today_missed"
+                                  caption="'RECORDED'"/>
+
+                    <!-- Only a manager may read the missed rounds, so only a
+                         manager is offered the way through to them. -->
+                    <button t-if="data.today_missed"
+                            t-att-class="data.is_manager ? 'cm-missed-chip cm-missed-link' : 'cm-missed-chip'"
+                            t-att-disabled="data.is_manager ? undefined : 'disabled'"
+                            t-on-click="() => this.openMissed()">
+                        <span class="cm-missed-dot"/>
+                        <span><t t-esc="data.today_missed"/> missed</span>
+                        <i t-if="data.is_manager" class="fa fa-chevron-right ms-1 small"/>
                     </button>
                 </div>
             </div>
@@ -79,13 +113,13 @@
                             <code><t t-esc="currentOrigin"/></code>
                         </p>
                         <p class="mb-2">
-                            Please tell whoever looks after your Odoo server:
-                            <em>"The cleaning page needs to be served over https,
+                            Please tell whoever looks after your server:
+                            <em>"The Showroom Check page needs to be served over https,
                             otherwise the browser blocks the webcam."</em>
                         </p>
                         <p class="text-muted small mb-0">
-                            This is a browser security rule, not an Odoo setting.
-                            There is nothing wrong with your camera.
+                            This is a browser security rule, not a setting on this
+                            system. There is nothing wrong with your camera.
                         </p>
                     </div>
 
@@ -93,8 +127,8 @@
                         <div class="cm-blocker-icon">🎥</div>
                         <h4>This browser cannot record video</h4>
                         <p class="mb-0">
-                            Please open Odoo in Google Chrome or Microsoft Edge on a
-                            computer with a camera.
+                            Please open this page in Google Chrome or Microsoft Edge on
+                            a computer with a camera.
                         </p>
                     </div>
 
@@ -105,45 +139,53 @@
                         <t t-esc="data.deny_message"/>
                     </div>
 
-                    <!-- Nothing set up yet -->
-                    <div t-if="!slots.length" class="cm-empty">
+                    <!--
+                        Nothing configured at all is a different thing from a day
+                        with no rounds on it, and only one of the two is anybody's
+                        fault. They are told apart the way the app tells them apart.
+                    -->
+                    <div t-if="data.ok === false" class="cm-empty">
                         <div class="cm-blocker-icon">🧹</div>
-                        <h4>No cleaning rounds today</h4>
-                        <p t-if="data.is_manager" class="mb-3">
-                            Set up the daily rounds and their times to get started.
-                        </p>
-                        <p t-else="" class="mb-0">
-                            Your administrator has not set up any rounds for today.
-                        </p>
-                        <button t-if="data.is_manager" class="btn btn-primary"
-                                t-on-click="() => this.openSettings()">
-                            Set up rounds
-                        </button>
+                        <h4>Nothing set up yet</h4>
+                        <p class="mb-0"><t t-esc="data.deny_message"/></p>
                     </div>
 
                     <t t-else="">
-                        <!-- Today at a glance -->
-                        <div class="cm-summary">
-                            <div class="cm-stat">
-                                <div class="cm-stat-value"><t t-esc="data.today_done"/></div>
-                                <div class="cm-stat-label">Recorded</div>
-                            </div>
-                            <div class="cm-stat">
-                                <div class="cm-stat-value"><t t-esc="data.today_total"/></div>
-                                <div class="cm-stat-label">Rounds today</div>
-                            </div>
-                            <div t-att-class="data.today_missed ? 'cm-stat cm-stat-bad' : 'cm-stat'">
-                                <div class="cm-stat-value"><t t-esc="data.today_missed"/></div>
-                                <div class="cm-stat-label">Missed</div>
-                            </div>
+                        <!-- The hero counts as content: a single open round must
+                             not show "no rounds today" underneath its own card. -->
+                        <div t-if="!slots.length and !heroMode" class="cm-empty">
+                            <div class="cm-blocker-icon">🧹</div>
+                            <h4>No rounds today</h4>
+                            <p t-if="data.is_manager" class="mb-3">
+                                Set up the daily rounds and their times to get started.
+                            </p>
+                            <p t-else="" class="mb-0">
+                                Your administrator has not set up any rounds for today.
+                            </p>
+                            <button t-if="data.is_manager" class="btn btn-primary"
+                                    t-on-click="() => this.openSettings()">
+                                Set up rounds
+                            </button>
                         </div>
 
-                        <div class="cm-slots">
+                        <OpenRoundCard t-if="heroMode"
+                                       mode="heroMode"
+                                       round="heroRound"
+                                       countdown="heroRound ? countdownFor(heroRound) : undefined"
+                                       capturesOnly="capturesOnly"
+                                       canRecord="heroCanRecord"
+                                       blockedMessage="heroBlockedMessage"
+                                       onRecord="(r) => this.openRecorder(r)"
+                                       done="data.today_done"
+                                       total="data.today_total"/>
+
+                        <div t-if="slots.length" class="cm-slots">
                             <SlotCard t-foreach="slots" t-as="round" t-key="round.id"
                                       round="round"
                                       countdown="countdownFor(round)"
                                       pending="isPending(round)"
                                       canRecord="canRecord(round)"
+                                      capturesOnly="capturesOnly"
                                       blockedMessage="blockedMessage(round)"
                                       onRecord="(r) => this.openRecorder(r)"
                                       onView="(r) => this.viewRecording(r)"/>

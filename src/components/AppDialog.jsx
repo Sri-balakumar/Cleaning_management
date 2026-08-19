@@ -1,6 +1,7 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { Animated, BackHandler, Modal, Pressable, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { AppError } from '../api/errors';
 import { useT } from '../i18n/LanguageProvider';
 import { colors, radius, spacing, typography } from '../theme';
 import { PrimaryButton } from './PrimaryButton';
@@ -140,6 +141,58 @@ export function useDialog() {
   const ctx = useContext(DialogContext);
   if (!ctx) throw new Error('useDialog must be used inside <DialogProvider>');
   return ctx;
+}
+
+/**
+ * A server that never answered gets a dialog, not a line of text.
+ *
+ * "The server took too long to respond" on a banner is easy to miss and offers
+ * nothing to do about it, when the one thing anybody wants at that point is to
+ * try again. Only for `timeout`: the other kinds either explain themselves
+ * where they happen (a permission refusal) or need a different answer entirely
+ * (a wrong password), and interrupting for those would just be noise.
+ *
+ * Raised once per outage rather than once per attempt. The dashboard asks the
+ * server every 15 to 60 seconds, so a server that is down would otherwise put
+ * this up again and again, over whatever the person had moved on to. It arms
+ * itself again on the first call that gets through - and on Try again, so that
+ * a retry which also times out still says so rather than failing silently.
+ *
+ * Takes the error itself, not a translated string: only the AppError knows
+ * whether this was a timeout or something else entirely.
+ */
+export function useTimeoutDialog(error, onRetry) {
+  const { confirm } = useDialog();
+  const { t } = useT();
+  const armed = useRef(true);
+  // In a ref so a caller passing a fresh closure each render does not re-run
+  // the effect and raise the dialog a second time.
+  const retry = useRef(onRetry);
+  retry.current = onRetry;
+
+  useEffect(() => {
+    if (!error) {
+      armed.current = true;
+      return;
+    }
+    if (!armed.current || AppError.from(error).kind !== 'timeout') return;
+    armed.current = false;
+    confirm({
+      title: t.serverNotResponding,
+      message: t.errors.timeout,
+      icon: 'cloud-offline-outline',
+      actions: [
+        {
+          label: t.tryAgain,
+          onPress: () => {
+            armed.current = true;
+            retry.current?.();
+          },
+        },
+        { label: t.cancel, style: 'cancel' },
+      ],
+    });
+  }, [error, confirm, t]);
 }
 
 const styles = StyleSheet.create({

@@ -1,0 +1,88 @@
+// The comparison card, to the app's arrangement.
+//
+// Used from a kanban inside two form views, so everything here is scoped to
+// its own classes rather than to the kanban's - the same card is rendered by
+// the Comparisons form and by the recording form's Showroom Photos page, and
+// both must look the same.
+
+.cm-shot-label {
+    font-size: .6875rem;
+    opacity: .6;
+    margin-bottom: .125rem;
+}
+
+// A fixed tile with the picture cropped into it, rather than each image
+// following its own aspect ratio. Two pictures of the same room from the same
+// spot are meant to be read side by side, and they cannot be if one is half
+// again as tall as the other.
+.cm-shot-img {
+    display: block;
+    width: 100%;
+    height: 8.125rem;
+    object-fit: cover;
+    border-radius: .5rem;
+    background: #F8FAFC;
+}
+
+// The verdict, in the four bands the server computes. `unknown` is styled here
+// as deliberately as the rest: it is an answer, not a missing one, and the
+// badge widget had nothing to say about it.
+.cm-verdict {
+    display: inline-block;
+    padding: .1875rem .625rem;
+    border-radius: 10rem;
+    border: 1px solid transparent;
+    font-size: .6875rem;
+    font-weight: 700;
+    line-height: 1.4;
+
+    &.cm-verdict-ok {
+        color: #10B981;
+        background: #ECFDF5;
+        border-color: #A7F3D0;
+    }
+    &.cm-verdict-warn {
+        color: #D97706;
+        background: #FFFBEB;
+        border-color: #FDE68A;
+    }
+    &.cm-verdict-alert {
+        color: #DC2626;
+        background: #FEF2F2;
+        border-color: #FECACA;
+    }
+    &.cm-verdict-unknown {
+        color: #94A3B8;
+        background: #F8FAFC;
+        border-color: #E2E8F0;
+    }
+}
+
+// The number takes the verdict's colour, so the two cannot disagree at a
+// glance. It is shown only where there is a real one - see the view.
+.cm-score {
+    font-size: .9375rem;
+    font-weight: 700;
+
+    &.cm-score-ok { color: #10B981; }
+    &.cm-score-warn { color: #D97706; }
+    &.cm-score-alert { color: #DC2626; }
+    &.cm-score-unknown { color: #94A3B8; }
+}
+
+.cm-shot-note {
+    font-size: .8125rem;
+    line-height: 1.35;
+    opacity: .75;
+}
+
+// The headline before the pictures: what the round scored, where it scored
+// worst, and when it was worked out. One line, because the breakdown is the
+// cards underneath it.
+.cm-comparison-summary {
+    border: 1px solid var(--border-color, #dee2e6);
+    border-radius: .5rem;
+    padding: .75rem 1rem;
+    margin-bottom: 1rem;
+    font-size: .9375rem;
+}

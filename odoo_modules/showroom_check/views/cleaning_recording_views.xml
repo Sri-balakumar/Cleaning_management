@@ -165,40 +165,49 @@
                                     <field name="reference_image_id"/>
                                     <field name="match_level"/>
                                     <field name="match_error"/>
+                                    <field name="matched_at"/>
                                     <field name="reference_replaced"/>
                                     <templates>
                                         <t t-name="card">
                                             <div class="row g-0">
-                                                <div class="col-12 mb-1">
-                                                    <strong><field name="name"/></strong>
-                                                    <span class="float-end">
-                                                        <field name="match_level"
-                                                               widget="badge"
-                                                               decoration-danger="match_level == 'alert'"
-                                                               decoration-warning="match_level == 'warn'"
-                                                               decoration-success="match_level == 'ok'"/>
+                                                <div class="col-12 mb-1 d-flex align-items-center gap-2">
+                                                    <strong class="flex-grow-1"><field name="name"/></strong>
+                                                    <span t-attf-class="cm-verdict cm-verdict-{{record.match_level.raw_value}}">
+                                                        <t t-esc="record.match_level.value"/>
                                                     </span>
                                                 </div>
                                                 <div class="col-6 pe-1">
-                                                    <div class="text-muted small">Original</div>
+                                                    <div class="cm-shot-label">How it should look</div>
                                                     <img t-att-src="'/web/image/cleaning.reference.image/' + record.reference_image_id.raw_value + '/image'"
-                                                         class="img img-fluid" alt="Original"/>
+                                                         class="cm-shot-img" alt="How it should look"/>
                                                 </div>
                                                 <div class="col-6 ps-1">
-                                                    <div class="text-muted small">Today</div>
+                                                    <div class="cm-shot-label">Today</div>
                                                     <img t-att-src="'/web/image/cleaning.recording.shot/' + record.id.raw_value + '/image'"
-                                                         class="img img-fluid" alt="Today"/>
+                                                         class="cm-shot-img" alt="Today"/>
                                                 </div>
-                                                <div class="col-12 mt-1">
-                                                    <span>Match <field name="match_score"/>%</span>
-                                                    <div class="text-muted">
+                                                <div class="col-12 mt-2">
+                                                    <!-- Only where there is a real one. An
+                                                         unscored photograph showing "0" would
+                                                         read as the worst possible result
+                                                         rather than as no result. -->
+                                                    <div t-if="record.matched_at.raw_value"
+                                                         t-attf-class="cm-score cm-score-{{record.match_level.raw_value}}">
+                                                        Match <field name="match_score"/>%
+                                                    </div>
+                                                    <!-- What changed, in words - the one thing
+                                                         no measurement produces. Or why it
+                                                         could not be compared, which matters
+                                                         just as much. One or the other. -->
+                                                    <div t-if="record.ai_changes.raw_value"
+                                                         class="cm-shot-note">
                                                         <field name="ai_changes"/>
                                                     </div>
-                                                    <div class="text-danger small"
-                                                         t-if="record.match_error.raw_value">
+                                                    <div t-elif="record.match_error.raw_value"
+                                                         class="cm-shot-note text-danger">
                                                         <field name="match_error"/>
                                                     </div>
-                                                    <div class="text-warning small"
+                                                    <div class="text-warning small mt-1"
                                                          t-if="record.reference_replaced.raw_value">
                                                         The original for this view has been
                                                         replaced since this round was recorded.

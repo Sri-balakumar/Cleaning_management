@@ -1,23 +1,67 @@
-// Colours come from Bootstrap variables rather than fixed values, so the page
-// follows whatever backend theme is in use instead of fighting it.
+// Below the header, colours come from Bootstrap variables rather than fixed
+// values, so the page follows whatever backend theme is in use instead of
+// fighting it.
+//
+// The header and the hero are the exception, and deliberately so: they are the
+// app's own gradient, to the app's own values, because that screen and this
+// page are the same screen on two devices and a manager moves between them.
+$cm-gradient: linear-gradient(135deg, #312E81 0%, #4F46E5 55%, #0EA5E9 100%);
+$cm-gradient-soft: linear-gradient(135deg, #6366F1 0%, #0EA5E9 100%);
+$cm-on-gradient: rgba(255, 255, 255, .72);
+$cm-glass: rgba(255, 255, 255, .16);
+$cm-glass-strong: rgba(255, 255, 255, .28);
 
 .cm-dashboard {
     padding: 1.5rem;
     height: 100%;
     overflow: auto;
 
+    // --- The header -------------------------------------------------------
+    .cm-hero-header {
+        background: $cm-gradient;
+        border-radius: 1.25rem;
+        padding: 1.5rem;
+        margin-bottom: 1.5rem;
+        color: #fff;
+    }
+
     .cm-header {
+        position: relative;
         display: flex;
         align-items: flex-start;
         justify-content: space-between;
         flex-wrap: wrap;
         gap: 1rem;
-        margin-bottom: 1.5rem;
     }
 
-    .cm-title {
-        margin: 0;
-        font-weight: 600;
+    .cm-mark {
+        position: absolute;
+        left: 50%;
+        top: 50%;
+        transform: translate(-50%, -50%);
+        height: 36px;
+        width: auto;
+        pointer-events: none;
+
+        // The greeting and the buttons take what they need and the mark is
+        // laid over whatever is between them, so on a narrow window there is
+        // nothing stopping it landing on top of one or the other. It is
+        // decoration - it goes rather than covers something that is not.
+        @media (max-width: 48em) {
+            display: none;
+        }
+    }
+
+    .cm-greeting {
+        font-size: 1.5rem;
+        font-weight: 700;
+        letter-spacing: -.02em;
+    }
+
+    .cm-today {
+        margin-top: .25rem;
+        font-size: .8125rem;
+        color: $cm-on-gradient;
     }
 
     .cm-header-actions {
@@ -26,36 +70,204 @@
         flex-wrap: wrap;
     }
 
-    // --- Today at a glance ------------------------------------------------
-    .cm-summary {
-        display: flex;
-        gap: 1rem;
-        flex-wrap: wrap;
-        margin-bottom: 1.5rem;
-    }
+    // Glass rather than an outline button: an outline in the theme's own
+    // colours disappears against the gradient under half the themes there are.
+    .cm-header-btn {
+        background: $cm-glass;
+        border: 1px solid $cm-glass-strong;
+        color: #fff;
 
-    .cm-stat {
-        flex: 0 0 auto;
-        min-width: 7rem;
-        padding: .75rem 1.25rem;
-        border: 1px solid var(--border-color, #dee2e6);
-        border-radius: .5rem;
-        text-align: center;
-
-        &.cm-stat-bad .cm-stat-value {
-            color: var(--bs-danger, #dc3545);
+        &:hover,
+        &:focus {
+            background: $cm-glass-strong;
+            color: #fff;
         }
     }
 
-    .cm-stat-value {
-        font-size: 1.75rem;
-        font-weight: 600;
-        line-height: 1.1;
+    // --- Today at a glance ------------------------------------------------
+    .cm-summary {
+        display: flex;
+        align-items: center;
+        gap: 1rem;
+        flex-wrap: wrap;
+        margin-top: 1.25rem;
     }
 
-    .cm-stat-label {
+    .cm-ring {
+        position: relative;
+        flex: 0 0 auto;
+    }
+
+    .cm-ring-track {
+        stroke: $cm-glass-strong;
+    }
+
+    .cm-ring-done {
+        stroke: #fff;
+    }
+
+    .cm-ring-missed {
+        stroke: #DC2626;
+    }
+
+    .cm-ring-centre {
+        position: absolute;
+        inset: 0;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        pointer-events: none;
+    }
+
+    .cm-ring-value {
+        font-size: 1.25rem;
+        font-weight: 700;
+        line-height: 1.1;
+        letter-spacing: -.03em;
+    }
+
+    .cm-ring-total {
         font-size: .8125rem;
-        opacity: .7;
+        font-weight: 600;
+        color: $cm-on-gradient;
+    }
+
+    .cm-ring-caption {
+        font-size: .5625rem;
+        font-weight: 700;
+        letter-spacing: .04em;
+        color: $cm-on-gradient;
+    }
+
+    .cm-missed-chip {
+        display: inline-flex;
+        align-items: center;
+        gap: .5rem;
+        padding: .375rem .75rem;
+        border-radius: 10rem;
+        background: $cm-glass;
+        border: 1px solid $cm-glass-strong;
+        color: #fff;
+        font-size: .75rem;
+        font-weight: 700;
+
+        // Not a way through for anybody who may not read the missed rounds, so
+        // it should not fade as though it were a button being denied them.
+        &:disabled {
+            opacity: 1;
+            cursor: default;
+        }
+
+        &.cm-missed-link:hover {
+            background: $cm-glass-strong;
+        }
+    }
+
+    .cm-missed-dot {
+        width: .4375rem;
+        height: .4375rem;
+        border-radius: 50%;
+        background: #DC2626;
+    }
+
+    // --- What to do now ---------------------------------------------------
+    .cm-hero {
+        background: $cm-gradient;
+        border-radius: 1.25rem;
+        padding: 1.25rem;
+        margin-bottom: 1.5rem;
+        color: #fff;
+        box-shadow: 0 .625rem 1.25rem rgba(79, 70, 229, .3);
+
+        // A round that has not opened is a statement of what is coming rather
+        // than a call to go and do something, and is dressed down to say so.
+        &.cm-hero-soft {
+            background: $cm-gradient-soft;
+        }
+    }
+
+    .cm-hero-eyebrow {
+        display: flex;
+        align-items: center;
+        gap: .5rem;
+        font-size: .6875rem;
+        font-weight: 800;
+        letter-spacing: .07em;
+    }
+
+    .cm-hero-dot {
+        width: .5rem;
+        height: .5rem;
+        border-radius: 50%;
+        background: #4ADE80;
+
+        &.cm-hero-dot-next {
+            background: $cm-on-gradient;
+        }
+    }
+
+    .cm-hero-tick {
+        color: #4ADE80;
+    }
+
+    .cm-hero-name {
+        margin-top: .75rem;
+        font-size: 1.375rem;
+        font-weight: 700;
+        letter-spacing: -.02em;
+    }
+
+    .cm-hero-window {
+        margin-top: .125rem;
+        font-size: .8125rem;
+        color: $cm-on-gradient;
+    }
+
+    .cm-hero-countdown {
+        margin-top: 1rem;
+        font-size: .875rem;
+        color: $cm-on-gradient;
+
+        strong {
+            color: #fff;
+            font-weight: 800;
+        }
+    }
+
+    .cm-hero-warning {
+        display: flex;
+        align-items: flex-start;
+        gap: .5rem;
+        margin-top: .75rem;
+        padding: .75rem;
+        border-radius: .75rem;
+        background: rgba(217, 119, 6, .32);
+        border: 1px solid rgba(253, 230, 138, .55);
+        font-size: .75rem;
+        font-weight: 600;
+    }
+
+    .cm-hero-action {
+        margin-top: 1rem;
+        background: $cm-glass;
+        border: 1px solid $cm-glass-strong;
+        color: #fff;
+        font-weight: 700;
+
+        &:hover,
+        &:focus {
+            background: $cm-glass-strong;
+            color: #fff;
+        }
+    }
+
+    .cm-hero-blocked {
+        display: flex;
+        align-items: center;
+        margin-top: 1rem;
+        font-size: .8125rem;
+        color: $cm-on-gradient;
     }
 
     // --- The rounds -------------------------------------------------------
@@ -106,12 +318,38 @@
         opacity: .7;
     }
 
+    .cm-slot-note {
+        margin-top: .5rem;
+        font-size: .8125rem;
+        opacity: .7;
+    }
+
+    // The app's pill, with its four colours, rather than a faded word.
     .cm-slot-status {
-        font-size: .75rem;
-        text-transform: uppercase;
+        flex: 0 0 auto;
+        padding: .25rem .75rem;
+        border-radius: 10rem;
+        font-size: .6875rem;
+        font-weight: 700;
         letter-spacing: .03em;
-        opacity: .6;
         white-space: nowrap;
+
+        &.cm-status-done {
+            color: #10B981;
+            background: #ECFDF5;
+        }
+        &.cm-status-open {
+            color: #4F46E5;
+            background: #EEF2FF;
+        }
+        &.cm-status-upcoming {
+            color: #475569;
+            background: #F8FAFC;
+        }
+        &.cm-status-missed {
+            color: #DC2626;
+            background: #FEF2F2;
+        }
     }
 
     .cm-slot-body {

@@ -1,0 +1,55 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<templates xml:space="preserve">
+
+    <t t-name="showroom_check.OpenRoundCard">
+
+        <!-- Everything recorded. No round to name, so the count takes its place. -->
+        <div t-if="props.mode === 'done'" class="cm-hero">
+            <div class="cm-hero-eyebrow">
+                <i class="fa fa-check-circle cm-hero-tick"/>
+                <span>ALL DONE</span>
+            </div>
+            <div class="cm-hero-name"><t t-esc="props.done"/>/<t t-esc="props.total"/></div>
+            <div class="cm-hero-window">Every round recorded today.</div>
+        </div>
+
+        <div t-else="" t-att-class="cardClass">
+            <div class="cm-hero-eyebrow">
+                <span t-att-class="isOpen ? 'cm-hero-dot' : 'cm-hero-dot cm-hero-dot-next'"/>
+                <span t-esc="isOpen ? 'OPEN NOW' : 'UP NEXT'"/>
+            </div>
+
+            <div class="cm-hero-name"><t t-esc="props.round.name"/></div>
+            <div class="cm-hero-window"><t t-esc="props.round.window_label"/></div>
+
+            <div class="cm-hero-countdown">
+                <t t-esc="isOpen ? 'Closes in' : 'Opens in'"/>
+                <strong class="ms-1"><t t-esc="countdownLabel"/></strong>
+            </div>
+
+            <!--
+                The server flags this when what is left of the window is shorter
+                than the configured clip. Its own note is that the button still
+                works and the interface warns - a short recording beats none.
+            -->
+            <div t-if="isOpen and props.round.will_overrun" class="cm-hero-warning">
+                <i class="fa fa-exclamation-triangle me-2"/>
+                <span>
+                    Not enough of the window left for a full clip - it will be cut short.
+                </span>
+            </div>
+
+            <t t-if="isOpen">
+                <button t-if="props.canRecord" class="btn cm-hero-action w-100"
+                        t-on-click="() => this.props.onRecord(props.round)">
+                    <i t-att-class="actionIcon"/><t t-esc="actionLabel"/>
+                </button>
+                <div t-else="" class="cm-hero-blocked">
+                    <i class="fa fa-lock me-2"/>
+                    <t t-esc="props.blockedMessage || 'You cannot record this round.'"/>
+                </div>
+            </t>
+        </div>
+    </t>
+
+</templates>

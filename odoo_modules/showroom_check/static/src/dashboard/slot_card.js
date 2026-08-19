@@ -20,6 +20,7 @@ export class SlotCard extends Component {
         countdown: { type: Object, optional: true },
         pending: { type: Boolean, optional: true },
         canRecord: { type: Boolean, optional: true },
+        capturesOnly: { type: Boolean, optional: true },
         blockedMessage: { type: String, optional: true },
         onRecord: Function,
         onView: { type: Function, optional: true },
@@ -60,6 +61,7 @@ export class SlotCard extends Component {
         );
     }
 
+    /** The app's four words, so a round reads the same in both interfaces. */
     get statusLabel() {
         if (this.props.pending) {
             return "Opening...";
@@ -68,9 +70,40 @@ export class SlotCard extends Component {
             {
                 done: "Recorded",
                 open: "Open now",
-                upcoming: "Later today",
-                missed: "Not recorded",
+                upcoming: "Upcoming",
+                missed: "Missed",
             }[this.props.round.state] || ""
         );
+    }
+
+    get badgeClass() {
+        if (this.props.pending) {
+            return "cm-slot-status cm-status-upcoming";
+        }
+        return (
+            {
+                done: "cm-slot-status cm-status-done",
+                open: "cm-slot-status cm-status-open",
+                upcoming: "cm-slot-status cm-status-upcoming",
+                missed: "cm-slot-status cm-status-missed",
+            }[this.props.round.state] || "cm-slot-status cm-status-upcoming"
+        );
+    }
+
+    /**
+     * With the video switched off a round is photographs and nothing else, so
+     * neither button may promise a recording. The flag itself is read strictly
+     * against `false` by the dashboard, one level up.
+     */
+    get actionLabel() {
+        return this.props.capturesOnly ? "Capture now" : "Record now";
+    }
+
+    get upcomingLabel() {
+        return this.props.capturesOnly ? "Capture" : "Record";
+    }
+
+    get actionIcon() {
+        return this.props.capturesOnly ? "fa fa-camera me-2" : "fa fa-video-camera me-2";
     }
 }

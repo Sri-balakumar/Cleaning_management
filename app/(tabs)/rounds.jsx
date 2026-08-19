@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo } from 'react';
 import {
   ActivityIndicator,
+  Image,
   Pressable,
   RefreshControl,
   ScrollView,
@@ -17,7 +18,7 @@ import { getDashboardState } from '../../src/api/cleaning';
 import { useAuth } from '../../src/auth/AuthContext';
 import { RequireAuth } from '../../src/auth/RequireAuth';
 import { Avatar } from '../../src/components/Avatar';
-import { useDialog } from '../../src/components/AppDialog';
+import { useDialog, useTimeoutDialog } from '../../src/components/AppDialog';
 import { ErrorBanner } from '../../src/components/ErrorBanner';
 import { GradientBackground, GradientOrbs } from '../../src/components/GradientBackground';
 import { OpenRoundCard } from '../../src/components/OpenRoundCard';
@@ -98,6 +99,12 @@ function RoundsScreen() {
 
   const { loading, error, data, countdowns, pending, refresh, pause, resume } =
     useSlotClock(fetchState);
+
+  // The dashboard is the one screen that asks the server on its own, without
+  // anybody pressing anything, so a server that has stopped answering shows up
+  // here first. The banner stays underneath - this is the interruption, not
+  // the record.
+  useTimeoutDialog(error, refresh);
 
   useEffect(() => {
     if (!data) return;
@@ -185,6 +192,11 @@ function RoundsScreen() {
       >
         <GradientBackground style={[styles.header, { paddingTop: insets.top + spacing.xl }]}>
           <GradientOrbs />
+          {/* Greeting, mark, controls. The three of them fit only because each
+              is sized to leave the others room: the mark is pinned to the
+              centre of the row rather than laid out around what is beside it,
+              so anything too wide either side is simply covered up. The sum
+              that keeps them apart is written out over styles.headerRow. */}
           <View style={[styles.headerRow, rtlRow]}>
             <View style={styles.headerText}>
               <Text style={[styles.greeting, rtlText]}>{greeting},</Text>
@@ -192,6 +204,35 @@ function RoundsScreen() {
                 {user?.name?.split(/\s+/)[0] ?? 'there'}
               </Text>
             </View>
+
+            {/* Centred on the row rather than sitting in the flow, so it stays
+                dead centre whether or not the settings button is there. Laid
+                out over the row and non-interactive, so it cannot swallow a tap
+                meant for anything underneath it. */}
+            <View pointerEvents="none" style={styles.markWrap}>
+              {/* The mark alone, not the full wordmark: "ai.Biz" and the
+                  tagline are unreadable at this size. Nothing behind it - the
+                  file is transparent, so what carries it is its own size, the
+                  white highlights down the numerals and the orange arrow. The
+                  blue itself is #2E7DBF to #7EC2EE against a #4F46E5 gradient,
+                  the same family at much the same brightness, so the flat
+                  areas will always be quiet. */}
+              <Image
+                source={require('../../assets/logo-369-mark.png')}
+                style={styles.markImage}
+                resizeMode="contain"
+                accessibilityRole="image"
+                accessibilityLabel="369"
+              />
+            </View>
+
+            {/* Takes whatever width is left over. justifyContent cannot do this
+                job here: maxWidth stops the greeting's flex:1 from absorbing
+                the slack, so flex-end packed the greeting against the controls
+                and left the start of the row empty - with the greeting sitting
+                straight on top of the centred mark. */}
+            <View style={styles.headerSpacer} />
+
             {data?.is_manager ? (
               <Pressable
                 onPress={openConfiguration}
@@ -222,7 +263,7 @@ function RoundsScreen() {
               accessibilityRole="button"
               accessibilityLabel={t.tabProfile}
             >
-              <Avatar name={user?.name} base64={user?.avatarBase64} size={48} ring />
+              <Avatar name={user?.name} base64={user?.avatarBase64} size={40} ring />
             </Pressable>
           </View>
 
@@ -341,12 +382,54 @@ const styles = StyleSheet.create({
     borderBottomRightRadius: radius.xl,
     overflow: 'hidden',
   },
-  headerRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.lg },
-  headerText: { flex: 1 },
+  // The mark is not in the flow of this row - it is pinned across the middle
+  // of it - so the greeting and the three controls have to be small enough to
+  // stay out of its way. That is one sum, taken at 360pt, the narrowest phone
+  // worth having, with a manager's three controls:
+  //
+  //   row      360 - 2 x spacing.xl              = 320
+  //   controls 32 + 8 + 32 + 8 + 40              = 120  ->  200...320
+  //            (headerSpacer takes the rest, so the extra gap it brings
+  //             comes out of the slack rather than out of this sum)
+  //   greeting 34% of 320                        = 108.8 ->   0...108.8
+  //   mark     36 x 459/232                      =  71.2, centred on 160
+  //                                              -> 124.4...195.6
+  //
+  // which leaves 15.6pt of daylight on one side and 4.4pt on the other. Every
+  // wider screen has more, and a non-manager has 40pt more again. Grow any one
+  // of those figures without redoing the sum and the mark goes straight back
+  // under the gear, which is how it got there twice already.
+  headerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+  },
+  headerSpacer: { flex: 1 },
+  markWrap: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    top: 0,
+    bottom: 0,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  // Height fixed, width from the source ratio, so it can never distort - and
+  // the width is the half of it that matters, because with no backing the
+  // artwork itself is what has to stay clear of the gear. 36 x 459/232 is
+  // 71.2pt wide; see the sum over styles.headerRow for where that has to fit.
+  // 40 is the most that will go in without the controls shrinking too.
+  markImage: { height: 36, aspectRatio: 459 / 232 },
+  // Capped so a long name truncates before it reaches the centred mark. No
+  // flex:1 - headerSpacer is what claims the slack, and two items growing into
+  // it would share it and drag the greeting back towards the middle.
+  headerText: { maxWidth: '34%' },
   logOut: {
-    width: 38,
-    height: 38,
-    borderRadius: 19,
+    // 32 rather than 38, and the hitSlop of 10 either side leaves the tap
+    // target at 52 - larger than the button ever was to touch.
+    width: 32,
+    height: 32,
+    borderRadius: 16,
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: colors.glass,
