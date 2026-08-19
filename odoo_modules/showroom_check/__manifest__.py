@@ -52,6 +52,7 @@ detects this and explains it. See ``doc/README.md`` for the reverse-proxy setup.
         'views/cleaning_config_views.xml',
         'views/cleaning_slot_views.xml',
         'views/cleaning_recording_views.xml',
+        'views/cleaning_comparison_views.xml',
         'views/cleaning_slot_missed_views.xml',
         'views/cleaning_ai_views.xml',
         # Deliberately NO res.config.settings extension. Inheriting the shared

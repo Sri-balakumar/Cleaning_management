@@ -1,7 +1,6 @@
 import React from 'react';
-import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Image, StyleSheet, Text, View } from 'react-native';
 import { Redirect } from 'expo-router';
-import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../src/auth/AuthContext';
 import { GradientBackground, GradientOrbs } from '../src/components/GradientBackground';
 import { useT } from '../src/i18n/LanguageProvider';
@@ -19,10 +18,16 @@ export default function Index() {
       <GradientBackground>
         <GradientOrbs />
         <View style={styles.center}>
-          <View style={styles.logo}>
-            <Ionicons name="sparkles" size={34} color={colors.white} />
-          </View>
-          <Text style={styles.title}>{t.appName}</Text>
+          {/* The same mark the login screen carries, and no product name.
+              This said "369 CleanPro" long after the app became Showroom
+              Check - a name in two places goes stale in one of them. */}
+          <Image
+            source={require('../assets/logo-369.png')}
+            style={styles.logo}
+            resizeMode="contain"
+            accessibilityRole="image"
+            accessibilityLabel="369 ai.Biz"
+          />
           <Text style={styles.subtitle}>{t.restoringSession}</Text>
           <ActivityIndicator color={colors.white} style={styles.spinner} />
         </View>
@@ -38,18 +43,8 @@ export default function Index() {
 }
 const styles = StyleSheet.create({
   center: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: spacing.xxl },
-  logo: {
-    width: 78,
-    height: 78,
-    borderRadius: radius.xl,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: colors.glassStrong,
-    borderWidth: 1,
-    borderColor: colors.glassBorder,
-    marginBottom: spacing.xl,
-  },
-  title: { fontSize: 30, fontWeight: '700', color: colors.white, letterSpacing: -0.5 },
+  // 467x368 source, held to that ratio so the wordmark never distorts.
+  logo: { width: 140, height: 110, marginBottom: spacing.lg },
   subtitle: {
     fontSize: 14,
     fontWeight: '500',

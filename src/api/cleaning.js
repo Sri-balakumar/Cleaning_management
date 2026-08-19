@@ -61,7 +61,10 @@ export function fetchRecordings(baseUrl, { limit = 80, domain = [] } = {}) {
       // no longer a given: it may be a clip, photographs, or both.
       ['id', 'slot_id', 'slot_date', 'user_id', 'started_at', 'duration_seconds',
        'file_format', 'quality', 'file_size_mb', 'truncated', 'ai_status', 'can_manage',
-       'video_filename', 'shot_count'],
+       'video_filename', 'shot_count',
+       // How the round scored. The Comparisons tab is built from this same
+       // call - it is the same rounds, asked a different question.
+       'match_score', 'match_level', 'match_worst_label'],
     ],
     kwargs: { limit, order: 'slot_date desc, id desc' },
   });

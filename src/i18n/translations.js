@@ -11,7 +11,6 @@
  */
 export const en = {
   // --- Generic ------------------------------------------------------------
-  appName: '369 CleanPro',
   cancel: 'Cancel',
   ok: 'OK',
   dismiss: 'Dismiss',
@@ -27,6 +26,7 @@ export const en = {
   // --- Tabs ---------------------------------------------------------------
   tabRounds: 'Dashboard',
   tabRecordings: 'History',
+  tabComparisons: 'Compare',
   tabProfile: 'Profile',
 
   // --- Login --------------------------------------------------------------
@@ -157,6 +157,8 @@ export const en = {
   couldNotPlay: 'This recording could not be played',
   couldNotPlayBody: 'The file may have been removed, or you may not have permission to watch it.',
   recordingNotFound: 'That recording could not be found.',
+  noComparisons: 'No comparisons yet',
+  noComparisonsBody: 'A round appears here once it has photographed a view, with how closely each one matched its original.',
   sectionPhotographs: 'Photographs',
   sectionPhotoDetails: 'Photograph details',
   todayLabel: 'Today',
@@ -390,7 +392,6 @@ export const en = {
 
 export const ar = {
   // --- Generic ------------------------------------------------------------
-  appName: '369 CleanPro',
   cancel: 'إلغاء',
   ok: 'حسنًا',
   dismiss: 'إغلاق',
@@ -406,6 +407,7 @@ export const ar = {
   // --- Tabs ---------------------------------------------------------------
   tabRounds: 'لوحة التحكم',
   tabRecordings: 'السجل',
+  tabComparisons: 'المقارنة',
   tabProfile: 'الملف الشخصي',
 
   // --- Login --------------------------------------------------------------
@@ -533,6 +535,8 @@ export const ar = {
   couldNotPlay: 'تعذّر تشغيل هذا التسجيل',
   couldNotPlayBody: 'ربما تم حذف الملف، أو ليس لديك إذن لمشاهدته.',
   recordingNotFound: 'تعذّر العثور على هذا التسجيل.',
+  noComparisons: 'لا توجد مقارنات بعد',
+  noComparisonsBody: 'تظهر الجولة هنا بعد تصوير أحد المشاهد، مع مدى تطابقه مع صورته الأصلية.',
   sectionPhotographs: 'الصور',
   sectionPhotoDetails: 'تفاصيل الصور',
   todayLabel: 'اليوم',

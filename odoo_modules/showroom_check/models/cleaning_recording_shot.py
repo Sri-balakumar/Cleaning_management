@@ -37,6 +37,12 @@ class CleaningRecordingShot(models.Model):
         index=True, ondelete='cascade')
     company_id = fields.Many2one(
         related='recording_id.company_id', store=True, index=True, readonly=True)
+    # Stored and indexed for the same reason company_id above is: the
+    # Comparisons view orders and groups by it, and unstored every one of those
+    # queries would have to reach through to the recording to sort.
+    slot_date = fields.Date(
+        related='recording_id.slot_date', string='Date',
+        store=True, index=True, readonly=True)
 
     direction = fields.Selection(
         DIRECTIONS, string='Direction', required=True, index=True, readonly=True)
@@ -67,7 +73,8 @@ class CleaningRecordingShot(models.Model):
         help="How closely this photograph matches the original, out of 100. "
              "Worked out here on this server, the same way every time.")
     match_level = fields.Selection(
-        MATCH_LEVELS, string='Verdict', compute='_compute_match_level')
+        MATCH_LEVELS, string='Verdict', compute='_compute_match_level',
+        search='_search_match_level')
     tile_score = fields.Integer(readonly=True)
     hash_score = fields.Integer(readonly=True)
     hash_distance = fields.Integer(readonly=True)
@@ -141,6 +148,47 @@ class CleaningRecordingShot(models.Model):
                 shot.match_level = 'warn'
             else:
                 shot.match_level = 'ok'
+
+    def _search_match_level(self, operator, value):
+        """Let the bands be filtered even though they are not stored.
+
+        The same trade the recording makes, for the same reason: leaving the
+        field unstored is what lets a threshold change re-band the whole history
+        for free, and translating a band back into a range of scores buys back
+        the half of that which is actually used. Without this the Comparisons
+        view cannot filter on a verdict at all - the view will not even load.
+        """
+        if operator not in ('=', '!=', 'in', 'not in'):
+            raise NotImplementedError(self.env._(
+                "A verdict can only be filtered with = or in."))
+        wanted = value if isinstance(value, (list, tuple)) else [value]
+        if operator in ('!=', 'not in'):
+            wanted = [key for key, _label in MATCH_LEVELS if key not in wanted]
+
+        # Thresholds are per company, so each config contributes its own range.
+        clauses = []
+        for config in self.env['cleaning.config'].sudo().search([]):
+            warn = config.match_warn_threshold or 60
+            alert = config.match_alert_threshold or 50
+            bands = {
+                'ok': [('match_score', '>=', warn), ('matched_at', '!=', False)],
+                'warn': [('match_score', '>=', alert), ('match_score', '<', warn),
+                         ('matched_at', '!=', False)],
+                'alert': [('match_score', '<', alert), ('matched_at', '!=', False)],
+                'unknown': [('matched_at', '=', False)],
+            }
+            for band in wanted:
+                if band not in bands:
+                    continue
+                clauses.append(
+                    [('recording_id.config_id', '=', config.id)] + bands[band])
+        if not clauses:
+            return [('id', '=', False)]
+
+        domain = clauses[0]
+        for clause in clauses[1:]:
+            domain = ['|'] + domain + clause
+        return domain
 
     # ------------------------------------------------------------------
     def _attach_image(self, blob, filename, mimetype='image/jpeg'):

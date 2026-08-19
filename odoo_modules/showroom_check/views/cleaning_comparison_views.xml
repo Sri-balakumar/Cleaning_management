@@ -1,0 +1,162 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+
+    <!--
+        Comparisons: a day, its rounds, and the pictures one tap in.
+
+        One row per round rather than one per view - a round that photographed
+        four views is one answer to "did the room match", not four - and the row
+        opens straight onto the comparison rather than onto the recording.
+
+        Both views below belong to this action alone, bound by view_ids. The
+        History list and the ordinary recording form are untouched: this is a
+        different question about the same records, not a change to how they are
+        normally read.
+    -->
+
+    <record id="view_cleaning_comparison_list" model="ir.ui.view">
+        <field name="name">cleaning.recording.comparison.list</field>
+        <field name="model">cleaning.recording</field>
+        <!-- Below the default so it is never picked up by anything but this
+             action's explicit binding. -->
+        <field name="priority">99</field>
+        <field name="arch" type="xml">
+            <list string="Comparisons" create="false" delete="false">
+                <field name="slot_date"/>
+                <field name="slot_id"/>
+                <field name="user_id" widget="many2one_avatar_user"/>
+                <field name="shot_count"/>
+                <field name="match_score" widget="progressbar"/>
+                <field name="match_level" widget="badge"
+                       decoration-danger="match_level == 'alert'"
+                       decoration-warning="match_level == 'warn'"
+                       decoration-success="match_level == 'ok'"/>
+                <field name="match_worst_label" optional="show"/>
+                <field name="matched_at" optional="hide"/>
+                <field name="company_id" groups="base.group_multi_company" optional="hide"/>
+            </list>
+        </field>
+    </record>
+
+    <record id="view_cleaning_comparison_form" model="ir.ui.view">
+        <field name="name">cleaning.recording.comparison.form</field>
+        <field name="model">cleaning.recording</field>
+        <field name="priority">99</field>
+        <field name="arch" type="xml">
+            <!-- Read-only throughout: every field on it was copied from the
+                 original at capture time or measured by the server, and none of
+                 it is anybody's to change afterwards. -->
+            <form string="Comparison" create="false" edit="false">
+                <sheet>
+                    <widget name="web_ribbon" title="Something Has Changed"
+                            bg_color="text-bg-danger"
+                            invisible="match_level != 'alert'"/>
+                    <widget name="web_ribbon" title="Worth A Look"
+                            bg_color="text-bg-warning"
+                            invisible="match_level != 'warn'"/>
+                    <field name="match_level" invisible="1"/>
+
+                    <div class="oe_title">
+                        <h1><field name="slot_id" readonly="1" options="{'no_open': True}"/></h1>
+                        <h3><field name="slot_date" readonly="1"/></h3>
+                    </div>
+
+                    <group>
+                        <group>
+                            <field name="match_score"/>
+                            <field name="match_worst_label"/>
+                        </group>
+                        <group>
+                            <field name="match_score_avg"/>
+                            <field name="matched_at"/>
+                        </group>
+                    </group>
+
+                    <!-- The card from the recording form's Showroom Photos page,
+                         lifted as-is. Images addressed by URL rather than the old
+                         kanban_image() helper, which no longer exists in this
+                         version and took the whole form down with it. -->
+                    <field name="shot_ids" nolabel="1" readonly="1">
+                        <kanban class="o_kanban_mobile" create="false" delete="false">
+                            <field name="reference_image_id"/>
+                            <field name="match_level"/>
+                            <field name="match_error"/>
+                            <field name="reference_replaced"/>
+                            <templates>
+                                <t t-name="card">
+                                    <div class="row g-0">
+                                        <div class="col-12 mb-1">
+                                            <strong><field name="name"/></strong>
+                                            <span class="float-end">
+                                                <field name="match_level" widget="badge"
+                                                       decoration-danger="match_level == 'alert'"
+                                                       decoration-warning="match_level == 'warn'"
+                                                       decoration-success="match_level == 'ok'"/>
+                                            </span>
+                                        </div>
+                                        <div class="col-6 pe-1">
+                                            <div class="text-muted small">Original</div>
+                                            <img t-att-src="'/web/image/cleaning.reference.image/' + record.reference_image_id.raw_value + '/image'"
+                                                 class="img img-fluid" alt="Original"/>
+                                        </div>
+                                        <div class="col-6 ps-1">
+                                            <div class="text-muted small">Today</div>
+                                            <img t-att-src="'/web/image/cleaning.recording.shot/' + record.id.raw_value + '/image'"
+                                                 class="img img-fluid" alt="Today"/>
+                                        </div>
+                                        <div class="col-12 mt-1">
+                                            <span>Match <field name="match_score"/>%</span>
+                                            <div class="text-muted">
+                                                <field name="ai_changes"/>
+                                            </div>
+                                            <div class="text-danger small"
+                                                 t-if="record.match_error.raw_value">
+                                                <field name="match_error"/>
+                                            </div>
+                                            <div class="text-warning small"
+                                                 t-if="record.reference_replaced.raw_value">
+                                                The original for this view has been
+                                                replaced since this round was recorded.
+                                            </div>
+                                        </div>
+                                    </div>
+                                </t>
+                            </templates>
+                        </kanban>
+                    </field>
+                </sheet>
+            </form>
+        </field>
+    </record>
+
+    <record id="action_cleaning_comparison" model="ir.actions.act_window">
+        <field name="name">Comparisons</field>
+        <field name="res_model">cleaning.recording</field>
+        <field name="view_mode">list,form</field>
+        <!-- Only rounds with something to compare. A video-only round has no
+             comparison and would be an empty row in a view about comparisons. -->
+        <field name="domain">[('shot_count', '&gt;', 0)]</field>
+        <!-- :day because Odoo groups a date by MONTH otherwise, and "August
+             2026" is not the dropdown this view is for. -->
+        <field name="context">{'group_by': 'slot_date:day'}</field>
+        <field name="view_ids" eval="[(5, 0, 0),
+            (0, 0, {'sequence': 1, 'view_mode': 'list',
+                    'view_id': ref('view_cleaning_comparison_list')}),
+            (0, 0, {'sequence': 2, 'view_mode': 'form',
+                    'view_id': ref('view_cleaning_comparison_form')})]"/>
+        <field name="help" type="html">
+            <p class="o_view_nocontent_smiling_face">No comparisons yet</p>
+            <p>
+                A round appears here once it has photographed a view, with how
+                closely each one matched its original.
+            </p>
+            <p>
+                If rounds are being recorded but nothing shows up, no original
+                photographs have been set up yet - a view with no original is
+                not asked for and not scored. Add them under
+                <em>Configuration &gt; Settings</em>.
+            </p>
+        </field>
+    </record>
+
+</odoo>

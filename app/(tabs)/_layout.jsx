@@ -98,6 +98,15 @@ export default function TabsLayout() {
         }}
       />
       <Tabs.Screen
+        name="comparisons"
+        options={{
+          title: t.tabComparisons,
+          tabBarIcon: ({ color, focused }) => (
+            <TabIcon name="images" focused={focused} color={color} />
+          ),
+        }}
+      />
+      <Tabs.Screen
         name="profile"
         options={{
           title: t.tabProfile,

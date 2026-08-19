@@ -36,6 +36,15 @@
               parent="menu_cleaning_root"
               sequence="20"/>
 
+    <!-- Before Missed Rounds: "did the room match" is the question asked
+         daily, and "was anything skipped" the one asked weekly. -->
+    <menuitem id="menu_cleaning_comparisons"
+              name="Comparisons"
+              parent="menu_cleaning_reporting"
+              action="showroom_check.action_cleaning_comparison"
+              groups="showroom_check.group_cleaning_user"
+              sequence="5"/>
+
     <menuitem id="menu_cleaning_missed"
               name="Missed Rounds"
               parent="menu_cleaning_reporting"
