@@ -98,6 +98,33 @@ DIRECTION_KEYS = [key for key, _label in DIRECTIONS]
 # having to agree to sort by anything in particular.
 DIRECTION_SEQUENCE = {'front': 10, 'right': 20, 'back': 30, 'left': 40}
 
+# Where each view lies for somebody standing in the middle of the room, as a
+# compass bearing in degrees.
+#
+# Here rather than in the app, because working out the turn between two views
+# needs to know WHICH views a round actually walks - and only this side knows
+# that. A round covers the views that have an original, so an office with front
+# and left set up turns a quarter to the LEFT between them; a client assuming
+# four evenly spaced views would confidently send somebody the other way, to a
+# wall nobody is checking.
+DIRECTION_BEARING = {'front': 0, 'right': 90, 'back': 180, 'left': 270}
+
+
+def turn_between(from_direction, to_direction):
+    """The shortest way round from one view to the next.
+
+    ``{'degrees': 90, 'clockwise': True}`` - clockwise being a turn to the
+    person's right. Returns None when either direction is unknown, which the
+    client reads as "no turn to show" rather than as zero.
+    """
+    start = DIRECTION_BEARING.get(from_direction)
+    end = DIRECTION_BEARING.get(to_direction)
+    if start is None or end is None:
+        return None
+    delta = (end - start) % 360
+    return ({'degrees': delta, 'clockwise': True} if delta <= 180
+            else {'degrees': 360 - delta, 'clockwise': False})
+
 DIRECTION_DEFAULT_LABEL = {
     'front': 'Front view',
     'right': 'Right side',
@@ -110,6 +137,18 @@ DIRECTION_DEFAULT_LABEL = {
 # perfectly valid JPEG, and comparing one of those against the original would
 # report a change that never happened.
 MIN_PHOTO_BYTES = 2048
+
+# Every showroom photograph is stored at this size, not at whatever the phone
+# produced. Both the originals and the rounds measured against them, because a
+# comparison between a 12 megapixel original and a bounded round photograph is a
+# comparison between two different pictures.
+#
+# A 12 megapixel JPEG is around 5 MB. Four a day for ninety days is 1.8 GB per
+# company, for detail nobody will ever look at: 1600px is far more than enough
+# to see that a bag is missing, and it also bounds what has to be base64'd into
+# an AI request later.
+STORED_LONG_EDGE = 1600
+STORED_QUALITY = 82
 
 # How far back a photographs-only round may claim to have started.
 #
@@ -547,20 +586,34 @@ class CleaningConfig(models.Model):
         picture to show beside the camera and no way to be scored afterwards,
         so listing it does nothing but invite a client to ask somebody to
         photograph a view the server is going to discard.
+
+        Each row after the first carries the turn from the one before it, so
+        the whole shape of the round is decided here: which views, in what
+        order, and how far to turn between them. A client is left to draw an
+        arrow and count degrees, which is all it should have to know. The first
+        row has no 'turn' at all - there is nothing to have turned from - and a
+        client must read a missing turn as "none to show" rather than as a
+        quarter turn, which is what it would be tempted to assume.
         """
         self.ensure_one()
         rows = []
+        previous = None
         for reference in self.reference_image_ids.sorted(
                 lambda r: (r.sequence, r.id)):
             if not reference.image:
                 continue
             stamp = reference.write_date and int(reference.write_date.timestamp())
+            turn = turn_between(previous, reference.direction) if previous else None
+            previous = reference.direction
             rows.append({
                 'key': reference.direction,
                 'label': reference.name or DIRECTION_DEFAULT_LABEL.get(
                     reference.direction, reference.direction),
                 'sequence': reference.sequence,
                 'instructions': reference.instructions or '',
+                # How far to turn to face this view from the last one, and
+                # which way. Absent on the first row, deliberately.
+                'turn': turn,
                 # Always true now that the rest are filtered out. Kept on the
                 # wire so a client that tests it carries on working.
                 'has_reference': True,

@@ -7,12 +7,22 @@ import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { AppError } from '../../src/api/errors';
-import { fetchRecording, videoHeaders, videoUrl } from '../../src/api/cleaning';
+import {
+  analyseWithAi,
+  fetchRecording,
+  fetchRecordingShots,
+  recomputeMatch,
+  videoHeaders,
+  videoUrl,
+} from '../../src/api/cleaning';
+import { fetchAiConfig } from '../../src/api/config';
 import { useAuth } from '../../src/auth/AuthContext';
 import { RequireAuth } from '../../src/auth/RequireAuth';
 import { ErrorBanner } from '../../src/components/ErrorBanner';
+import { PrimaryButton } from '../../src/components/PrimaryButton';
 import { GradientBackground, GradientOrbs } from '../../src/components/GradientBackground';
 import { InfoCard, InfoRow } from '../../src/components/InfoRow';
+import { RoundPhotos } from '../../src/components/RoundPhotos';
 import { translateError, useT } from '../../src/i18n/LanguageProvider';
 import { colors, radius, spacing } from '../../src/theme';
 
@@ -61,33 +71,66 @@ function RecordingScreen() {
   const { t, rtlRow, rtlText } = useT();
 
   const [record, setRecord] = useState(null);
+  const [shots, setShots] = useState([]);
+  // Whether the AI review is switched on at all, which decides if any of it is
+  // worth showing. Null until known, so nothing flashes up and then vanishes.
+  const [aiEnabled, setAiEnabled] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  // Which action is in flight, so only its own button spins.
+  const [busy, setBusy] = useState(null);
+  const [notice, setNotice] = useState(null);
+
+  /** Its own function because the two actions below have to re-read after they
+      run: a comparison or a review changes exactly what this screen shows. */
+  const load = useCallback(async () => {
+    try {
+      const row = await fetchRecording(connection.baseUrl, id);
+      if (!row) throw new AppError('server', t.recordingNotFound);
+      setRecord(row);
+      // After the record, and never fatal: a round whose photographs cannot
+      // be listed is still a round worth showing.
+      const photos = await fetchRecordingShots(connection.baseUrl, id).catch(() => []);
+      setShots(photos || []);
+      // Never fatal either: not knowing leaves the AI card out, which is the
+      // safe way round - better absent than showing scores for a review
+      // nobody switched on.
+      const ai = await fetchAiConfig(connection.baseUrl).catch(() => null);
+      setAiEnabled(!!ai?.enabled);
+    } catch (e) {
+      setError(translateError(t, AppError.from(e)));
+    } finally {
+      setLoading(false);
+    }
+  }, [connection, id, t]);
 
   useEffect(() => {
     let cancelled = false;
     void (async () => {
-      try {
-        const row = await fetchRecording(connection.baseUrl, id);
-        if (cancelled) return;
-        if (!row) throw new AppError('server', t.recordingNotFound);
-        setRecord(row);
-      } catch (e) {
-        if (!cancelled) setError(translateError(t, AppError.from(e)));
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
+      await load();
+      if (cancelled) return;
     })();
     return () => {
       cancelled = true;
     };
-  }, [connection, id, t]);
+  }, [load]);
+
+  // A round need not have a clip at all, and asking for one that was never
+  // recorded fetches a 404 and reports it as a playback failure - a fault
+  // where nothing is wrong. No filename, no source, nothing requested.
+  //
+  // The hook below still runs unconditionally, because hooks cannot be called
+  // in a branch; with a null source it simply has nothing to fetch.
+  const hasVideo = !!record?.video_filename;
 
   // The video route is permission-checked, so the session cookie has to travel
   // with the request the same way it does on every other call.
   const source = useMemo(
-    () => ({ uri: videoUrl(connection.baseUrl, id), headers: videoHeaders() }),
-    [connection, id],
+    () =>
+      hasVideo
+        ? { uri: videoUrl(connection.baseUrl, id), headers: videoHeaders() }
+        : null,
+    [connection, hasVideo, id],
   );
 
   const player = useVideoPlayer(source, (instance) => {
@@ -102,6 +145,31 @@ function RecordingScreen() {
 
   const aiKey = AI_KEYS[record?.ai_status];
   const canManage = Boolean(record?.can_manage);
+
+  /**
+   * Run a manager action and show whatever the server says about it.
+   *
+   * Both are refused server-side for anybody who is not a Cleaning Manager, so
+   * there is no permission check here - the refusal arrives as the server's own
+   * message, which is better wording than anything invented locally.
+   */
+  const run = useCallback(
+    async (which, work, done) => {
+      setBusy(which);
+      setError(null);
+      setNotice(null);
+      try {
+        await work();
+        await load();
+        setNotice(done);
+      } catch (e) {
+        setError(translateError(t, AppError.from(e)));
+      } finally {
+        setBusy(null);
+      }
+    },
+    [load, t],
+  );
 
   const close = useCallback(() => router.back(), [router]);
 
@@ -123,7 +191,7 @@ function RecordingScreen() {
                 .join(' · ')}
             </Text>
           </View>
-          {aiKey ? (
+          {aiKey && aiEnabled ? (
             <View style={[styles.pill, record.ai_status === 'done' && styles.pillDone]}>
               <Text style={styles.pillText}>{t[aiKey]}</Text>
             </View>
@@ -137,29 +205,76 @@ function RecordingScreen() {
       >
         {loading ? <ActivityIndicator color={colors.primary} style={styles.spinner} /> : null}
         {error ? <ErrorBanner message={error} /> : null}
+        {notice ? <ErrorBanner message={notice} tone="warning" /> : null}
 
         {record ? (
           <>
-            <View style={styles.videoFrame}>
-              <VideoView
-                style={styles.video}
-                player={player}
-                allowsFullscreen
-                allowsPictureInPicture
-                contentFit="contain"
-              />
-              {playbackStatus === 'error' ? (
-                <View style={styles.videoError}>
-                  <Ionicons name="alert-circle-outline" size={30} color={colors.white} />
-                  <Text style={styles.videoErrorTitle}>{t.couldNotPlay}</Text>
-                  <Text style={styles.videoErrorText}>
-                    {playbackError?.message || t.couldNotPlayBody}
-                  </Text>
-                </View>
-              ) : null}
-            </View>
+            {hasVideo ? (
+              <View style={styles.videoFrame}>
+                <VideoView
+                  style={styles.video}
+                  player={player}
+                  // allowsFullscreen is deprecated in favour of this.
+                  fullscreenOptions={{ enable: true }}
+                  allowsPictureInPicture
+                  contentFit="contain"
+                />
+                {playbackStatus === 'error' ? (
+                  <View style={styles.videoError}>
+                    <Ionicons name="alert-circle-outline" size={30} color={colors.white} />
+                    <Text style={styles.videoErrorTitle}>{t.couldNotPlay}</Text>
+                    <Text style={styles.videoErrorText}>
+                      {playbackError?.message || t.couldNotPlayBody}
+                    </Text>
+                  </View>
+                ) : null}
+              </View>
+            ) : null}
 
-            <InfoCard title={t.sectionRecording}>
+            {/* The pair the web form has in its header, on the same terms:
+                Compare again where there are photographs to re-score, and the
+                AI review only where it is switched on and there is something
+                for it to look at. Both are manager-only server-side. */}
+            {canManage && (shots.length || aiEnabled) ? (
+              <View style={[styles.actions, rtlRow]}>
+                {shots.length ? (
+                  <PrimaryButton
+                    label={t.compareAgain}
+                    icon="refresh-outline"
+                    variant="ghost"
+                    loading={busy === 'match'}
+                    disabled={!!busy}
+                    onPress={() =>
+                      run('match', () => recomputeMatch(connection.baseUrl, id), t.comparedAgain)
+                    }
+                    style={styles.action}
+                  />
+                ) : null}
+                {aiEnabled && (shots.length || record.frame_count) ? (
+                  <PrimaryButton
+                    label={t.analyseWithAi}
+                    icon="sparkles-outline"
+                    loading={busy === 'ai'}
+                    disabled={!!busy}
+                    onPress={() =>
+                      run('ai', () => analyseWithAi(connection.baseUrl, id), t.aiReviewRequested)
+                    }
+                    style={styles.action}
+                  />
+                ) : null}
+              </View>
+            ) : null}
+
+            {/* Above the file details on purpose: the photographs are the
+                check, and how they scored is what somebody opened this to find
+                out. Absent entirely on a video-only round. */}
+            {shots.length ? (
+              <InfoCard title={t.sectionPhotographs}>
+                <RoundPhotos baseUrl={connection.baseUrl} shots={shots} />
+              </InfoCard>
+            ) : null}
+
+            <InfoCard title={t.sectionRound}>
               <InfoRow
                 icon="person-outline"
                 label={t.recordedBy}
@@ -170,25 +285,38 @@ function RecordingScreen() {
                 label={t.startedAt}
                 value={formatMoment(record.started_at)}
               />
-              <InfoRow icon="stop-outline" label={t.endedAt} value={formatMoment(record.ended_at)} />
               <InfoRow
-                icon="timer-outline"
-                label={t.actualDuration}
-                value={`${record.duration_seconds ?? 0}${t.unitSecond}`}
+                icon="stop-outline"
+                label={t.endedAt}
+                value={formatMoment(record.ended_at)}
+                last={!hasVideo}
               />
-              <InfoRow
-                icon="options-outline"
-                label={t.configuredDuration}
-                value={`${record.configured_duration_seconds ?? 0}${t.unitSecond}`}
-              />
-              <InfoRow
-                icon="cut-outline"
-                label={t.cutShortLabel}
-                value={record.truncated ? t.yes : t.no}
-                last
-              />
+              {/* Every one of these describes a clip. With none recorded they
+                  are zeroes, and a zero reads as a measurement rather than as
+                  an absence. */}
+              {hasVideo ? (
+                <>
+                  <InfoRow
+                    icon="timer-outline"
+                    label={t.actualDuration}
+                    value={`${record.duration_seconds ?? 0}${t.unitSecond}`}
+                  />
+                  <InfoRow
+                    icon="options-outline"
+                    label={t.configuredDuration}
+                    value={`${record.configured_duration_seconds ?? 0}${t.unitSecond}`}
+                  />
+                  <InfoRow
+                    icon="cut-outline"
+                    label={t.cutShortLabel}
+                    value={record.truncated ? t.yes : t.no}
+                    last
+                  />
+                </>
+              ) : null}
             </InfoCard>
 
+            {hasVideo ? (
             <InfoCard title={t.sectionFile}>
               <InfoRow
                 icon="document-outline"
@@ -218,6 +346,44 @@ function RecordingScreen() {
                 last
               />
             </InfoCard>
+            ) : (
+            /* The same slot in the page, describing what this round actually
+               holds. A File card of blanks says nothing; this says how the
+               room scored, which is what the round was for. */
+            <InfoCard title={t.sectionPhotoDetails}>
+              <InfoRow
+                icon="images-outline"
+                label={t.photographCount}
+                value={String(record.shot_count ?? 0)}
+              />
+              <InfoRow
+                icon="speedometer-outline"
+                label={t.matchLabel}
+                value={record.matched_at ? `${record.match_score}%` : undefined}
+              />
+              <InfoRow
+                icon="stats-chart-outline"
+                label={t.matchAverage}
+                value={record.matched_at ? `${record.match_score_avg}%` : undefined}
+              />
+              <InfoRow
+                icon="alert-circle-outline"
+                label={t.worstView}
+                value={text(record.match_worst_label)}
+              />
+              <InfoRow
+                icon="time-outline"
+                label={t.comparedAt}
+                value={formatMoment(record.matched_at)}
+              />
+              <InfoRow
+                icon="folder-outline"
+                label={t.size}
+                value={record.file_size_mb ? `${record.file_size_mb} MB` : undefined}
+                last
+              />
+            </InfoCard>
+            )}
 
             {text(record.note) ? (
               <InfoCard title={t.notes}>
@@ -229,7 +395,10 @@ function RecordingScreen() {
 
             {/* Manager-only, matching the web form where the Audit and AI pages
                 both carry groups="…group_cleaning_manager". */}
-            {canManage ? (
+            {/* Manager-only, and only where the review is switched on. A card
+                of blanks headed "AI review" reads as a review that failed,
+                rather than one nobody asked for. */}
+            {canManage && aiEnabled ? (
               <InfoCard title={t.sectionAiReview}>
                 <InfoRow
                   icon="ribbon-outline"
@@ -289,6 +458,8 @@ const styles = StyleSheet.create({
   pillText: { fontSize: 11, fontWeight: '700', color: colors.white },
 
   body: { padding: spacing.xl, paddingBottom: spacing.xxxl },
+  actions: { flexDirection: 'row', gap: spacing.md },
+  action: { flex: 1 },
   spinner: { marginTop: spacing.xxxl },
   videoFrame: {
     aspectRatio: 16 / 9,

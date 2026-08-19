@@ -156,7 +156,8 @@ export default function LoginScreen() {
     setSubmitting(true);
     try {
       await signIn({ baseUrl, db: db.trim(), login: login.trim(), password });
-      router.replace('/profile');
+      // Straight to the dashboard, the same place a restored session lands.
+      router.replace('/rounds');
     } catch (error) {
       const err = AppError.from(error);
       if (err.kind === 'invalid_credentials') setCredentialError(translateError(t, err));
@@ -196,7 +197,6 @@ export default function LoginScreen() {
               accessibilityRole="image"
               accessibilityLabel="369 ai.Biz"
             />
-            <Text style={styles.brand}>{t.appName}</Text>
             <Text style={styles.tagline}>{t.signInToWorkspace}</Text>
             {/* Here as well as on Profile: a first-time Arabic user should not
                 have to read an English form to find the setting. */}
@@ -331,7 +331,7 @@ export default function LoginScreen() {
           <Text style={styles.footnote}>
             {t.credentialsFootnote}
           </Text>
-          <PoweredBy onGradient versionOnly />
+          <PoweredBy onGradient />
         </ScrollView>
       </KeyboardAvoidingView>
 
@@ -353,8 +353,11 @@ const styles = StyleSheet.create({
   scroll: { flexGrow: 1, paddingHorizontal: spacing.xl },
   header: { alignItems: 'center', marginBottom: spacing.xxl },
   // 467x368 source, held to that ratio so the wordmark never distorts.
-  wordmark: { width: 140, height: 110, marginBottom: spacing.lg },
-  brand: { fontSize: 28, fontWeight: '700', color: colors.white, letterSpacing: -0.5 },
+  //
+  // The top margin is what carries the header now that the app name has gone
+  // from under it: the logo alone sat too high against the status bar, and the
+  // gap is what makes it read as placed rather than pinned to the top edge.
+  wordmark: { width: 140, height: 110, marginTop: spacing.xxl, marginBottom: spacing.lg },
   langWrap: { marginTop: spacing.lg },
   tagline: {
     fontSize: 14,

@@ -29,7 +29,10 @@ export default function Index() {
       </GradientBackground>
     );
   }
-  const target = status === 'authenticated' ? '/profile' : '/login';
+  // The dashboard, which is the first tab and the whole point of opening the
+  // app: today's rounds and whether one is due. Profile is somewhere you go on
+  // purpose, not somewhere you land.
+  const target = status === 'authenticated' ? '/rounds' : '/login';
   log('boot', `session ${status} - redirecting to ${target}`);
   return <Redirect href={target} />;
 }

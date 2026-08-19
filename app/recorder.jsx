@@ -1,7 +1,7 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Animated, Pressable, StyleSheet, Text, View } from 'react-native';
 import { CameraView, useCameraPermissions } from 'expo-camera';
-import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useLocalSearchParams, useNavigation, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -9,9 +9,11 @@ import { AppError } from '../src/api/errors';
 import { getDashboardState, getUploadToken, uploadRecording } from '../src/api/cleaning';
 import { useAuth } from '../src/auth/AuthContext';
 import { RequireAuth } from '../src/auth/RequireAuth';
+import { useDialog } from '../src/components/AppDialog';
 import { ErrorBanner } from '../src/components/ErrorBanner';
 import { PrimaryButton } from '../src/components/PrimaryButton';
 import { formatCountdown } from '../src/cleaning/useSlotClock';
+import { DirectionCapture } from '../src/recorder/DirectionCapture';
 import { translateError, useT } from '../src/i18n/LanguageProvider';
 import { colors, radius, spacing, typography } from '../src/theme';
 
@@ -26,6 +28,28 @@ const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 function clock(seconds) {
   const total = Math.max(0, Math.floor(seconds));
   return `${Math.floor(total / 60)}:${String(total % 60).padStart(2, '0')}`;
+}
+
+/**
+ * The views to photograph, in the order somebody turning on the spot meets
+ * them.
+ *
+ * Filtered by askable_directions as well as taken from directions: the server
+ * drops a photograph of a view that has no original, so asking for one would
+ * have somebody take a picture that is thrown away. Newer servers already leave
+ * those out of `directions`; the intersection also does the right thing against
+ * one that does not.
+ *
+ * At module scope because two places need the same answer from the same data -
+ * the render, and the moment the settings arrive and the screen has to decide
+ * whether there is anything to show before the camera.
+ */
+function askableViews(settings) {
+  const askable = new Set(settings?.askable_directions || []);
+  const rows = settings?.directions || [];
+  return askable.size
+    ? rows.filter((row) => askable.has(row.key))
+    : rows.filter((row) => row.has_reference);
 }
 
 /** Map the server's pixel height onto the camera's quality presets. */
@@ -48,6 +72,8 @@ function RecorderScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { connection } = useAuth();
+  const navigation = useNavigation();
+  const { confirm } = useDialog();
   const { t, rtlText } = useT();
   const { slotId } = useLocalSearchParams();
 
@@ -56,7 +82,11 @@ function RecorderScreen() {
   // capture session, which stalls the preview exactly when it is being watched.
   const [mode, setMode] = useState('video');
   const [elapsed, setElapsed] = useState(0);
-  const [phase, setPhase] = useState('loading'); // loading|ready|recording|uploading|done
+  // loading|ready|recording|views|uploading|done
+  const [phase, setPhase] = useState('loading');
+  // Which view is being photographed, and what has been taken so far.
+  const [viewIndex, setViewIndex] = useState(0);
+  const [photos, setPhotos] = useState([]);
   const [settings, setSettings] = useState(null);
   const [round, setRound] = useState(null);
   const [remaining, setRemaining] = useState(0);
@@ -66,6 +96,9 @@ function RecorderScreen() {
   const cameraRef = useRef(null);
   const cancelled = useRef(false);
   const stopRequested = useRef(false);
+  // The clip, held while the views are photographed, so the whole round still
+  // goes up in one request at the end.
+  const pending = useRef(null);
   const ticker = useRef(null);
   const pulse = useRef(new Animated.Value(1)).current;
 
@@ -101,9 +134,26 @@ function RecorderScreen() {
         if (!target) throw new AppError('server', t.roundNoLongerAvailable);
         if (target.state !== 'open') throw new AppError('server', t.roundNotOpen);
         setRound(target);
-        setSettings(state.settings || {});
+        const resolved = state.settings || {};
+        setSettings(resolved);
         setRemaining(target.seconds_until_close || 0);
-        setPhase('ready');
+
+        // Straight to the first view when there is no clip to record.
+        //
+        // The ready screen exists to say how long the recording will be and to
+        // let somebody brace for it. A photographs-only round has none of that
+        // to say, so it was a screen whose only content was a second Capture
+        // now button - and they had already tapped Capture now to get here.
+        const photosOnly = resolved.video_enabled === false;
+        const list = askableViews(resolved);
+        if (photosOnly && list.length) {
+          pending.current = { startedAt: new Date(), frames: [] };
+          setViewIndex(0);
+          setPhotos([]);
+          setPhase('views');
+        } else {
+          setPhase('ready');
+        }
       } catch (e) {
         if (!cancelled.current) {
           setError(translateError(t, AppError.from(e)));
@@ -113,7 +163,56 @@ function RecorderScreen() {
     })();
   }, [connection, slotId, t]);
 
+  /**
+   * Leaving part-way through discards the photographs, so it asks first.
+   *
+   * Hooked to the navigator rather than to the close button, because the close
+   * button is only one of three doors: the Android back key and the dismiss
+   * gesture leave by the same route and would otherwise slip out unasked - and
+   * the back key is the one people actually use.
+   *
+   * Nothing has been uploaded at this point. A round reaches the server in one
+   * request at the very end, so abandoning one leaves nothing behind and
+   * re-entering starts cleanly at the first view.
+   */
+  useEffect(() => {
+    const stop = navigation.addListener('beforeRemove', (event) => {
+      // Nothing to lose, or already on the way out with the round sent.
+      if (!photos.length || phase === 'uploading' || phase === 'done') return;
+      event.preventDefault();
+      confirm({
+        title: t.leaveRound,
+        message: t.leaveRoundBody,
+        icon: 'exit-outline',
+        tone: 'danger',
+        actions: [
+          {
+            label: t.leave,
+            style: 'destructive',
+            onPress: () => navigation.dispatch(event.data.action),
+          },
+          { label: t.cancel, style: 'cancel' },
+        ],
+      });
+    });
+    return stop;
+  }, [confirm, navigation, phase, photos.length, t]);
+
   const duration = settings?.duration_seconds || 30;
+
+  // A round may be a clip, the photographs, or both - whichever the manager set
+  // up. `video_enabled` is read as "not false" so an older server that never
+  // sent it still records a clip, exactly as it always did.
+  const wantsVideo = settings?.video_enabled !== false;
+
+  const views = useMemo(() => askableViews(settings), [settings]);
+
+  const facing = settings?.facing_mode === 'user' ? 'front' : 'back';
+
+  // Video off and not one original set: there is nothing this round could
+  // record. The server refuses such a round outright, so the app says so here
+  // rather than sending somebody to a refusal.
+  const nothingToCapture = !wantsVideo && !views.length;
 
   /**
    * One still for the AI review, which reads images rather than video.
@@ -133,6 +232,49 @@ function RecorderScreen() {
       return null;
     }
   }, []);
+
+  const send = useCallback(
+    async ({ video, startedAt, endedAt, elapsed, frames, photos: taken = [] }) => {
+      setPhase('uploading');
+      setProgress(0);
+      try {
+        const csrfToken = await getUploadToken(connection.baseUrl);
+
+        await uploadRecording(
+          connection.baseUrl,
+          {
+            slotId: round.id,
+            csrfToken,
+            // Every one of these describes a clip. With no clip they are left
+            // empty rather than filled in with plausible-looking zeroes that
+            // somebody would later read as fact.
+            videoUri: video?.uri,
+            mimetype: video ? 'video/mp4' : '',
+            fileFormat: video ? 'mp4' : '',
+            startedAt,
+            endedAt: endedAt || new Date(),
+            durationSeconds: video ? elapsed : 0,
+            width: video ? settings?.width || 0 : 0,
+            height: video ? settings?.height || 0 : 0,
+            // Stopped by hand before the configured length was reached.
+            truncated: !!video && stopRequested.current && elapsed < duration - 1,
+            frames,
+            photos: taken,
+          },
+          setProgress,
+        );
+        if (cancelled.current) return;
+        setPhase('done');
+        router.back();
+      } catch (e) {
+        if (!cancelled.current) {
+          setError(translateError(t, AppError.from(e)));
+          setPhase('ready');
+        }
+      }
+    },
+    [connection, duration, round, router, settings, t],
+  );
 
   const start = useCallback(async () => {
     setError(null);
@@ -183,46 +325,64 @@ function RecorderScreen() {
     const still = await grabFrame();
     if (still) frames.push(still);
 
-    await send({ video, startedAt, endedAt, elapsed: seconds, frames });
-  }, [duration, grabFrame]);
+    const clip = { video, startedAt, endedAt, elapsed: seconds, frames };
+    // The views come between the clip and the upload, so the whole round still
+    // arrives in one request.
+    if (views.length) {
+      pending.current = clip;
+      setViewIndex(0);
+      setPhotos([]);
+      setPhase('views');
+      return;
+    }
+    await send(clip);
+  }, [duration, grabFrame, send, t, views.length]);
 
-  const send = useCallback(
-    async ({ video, startedAt, endedAt, elapsed, frames }) => {
-      setPhase('uploading');
-      setProgress(0);
-      try {
-        const csrfToken = await getUploadToken(connection.baseUrl);
+  /**
+   * Start a round that is photographs only.
+   *
+   * There is no clip to time, so the round is timed from the moment they begin
+   * walking the views - which is what the server allows for when the video is
+   * off.
+   */
+  const startViews = useCallback(() => {
+    setError(null);
+    pending.current = { startedAt: new Date(), frames: [] };
+    setViewIndex(0);
+    setPhotos([]);
+    setPhase('views');
+  }, []);
 
-        await uploadRecording(
-          connection.baseUrl,
-          {
-            slotId: round.id,
-            csrfToken,
-            videoUri: video.uri,
-            mimetype: 'video/mp4',
-            fileFormat: 'mp4',
-            startedAt,
-            endedAt,
-            durationSeconds: elapsed,
-            width: settings?.width || 0,
-            height: settings?.height || 0,
-            // Stopped by hand before the configured length was reached.
-            truncated: stopRequested.current && elapsed < duration - 1,
-            frames,
-          },
-          setProgress,
-        );
-        if (cancelled.current) return;
-        setPhase('done');
-        router.back();
-      } catch (e) {
-        if (!cancelled.current) {
-          setError(translateError(t, AppError.from(e)));
-          setPhase('ready');
-        }
+  const onCaptured = useCallback(
+    (key, uri) => {
+      // Stamped as each one is accepted, so a photographs-only round can be
+      // timed by its own work rather than by when the screen happened to open.
+      const taken = [...photos.filter((p) => p.key !== key), { key, uri, at: new Date() }];
+      setPhotos(taken);
+      if (viewIndex + 1 < views.length) {
+        setViewIndex(viewIndex + 1);
+        return;
       }
+      const clip = pending.current || {};
+      pending.current = null;
+
+      // With no clip, the round ran from the first photograph to the last.
+      // Opening the screen and walking to the far wall is not the round, and
+      // recording both ends as "whenever the upload happened" put an identical
+      // started and ended time on every one of them.
+      const stamps = taken.map((p) => p.at).filter(Boolean);
+      const first = stamps.length ? new Date(Math.min(...stamps)) : new Date();
+      const last = stamps.length ? new Date(Math.max(...stamps)) : new Date();
+
+      void send({
+        frames: [],
+        ...clip,
+        startedAt: clip.video ? clip.startedAt : first,
+        endedAt: clip.video ? new Date() : last,
+        photos: taken,
+      });
     },
-    [connection, duration, round, router, settings, t],
+    [photos, send, viewIndex, views.length],
   );
 
   const stop = useCallback(() => {
@@ -248,22 +408,49 @@ function RecorderScreen() {
     );
   }
 
+  // Its own screen, and the main CameraView is not rendered behind it: two
+  // camera previews mounted at once fight over the capture session, and the one
+  // that loses shows black.
+  if (phase === 'views' && views[viewIndex]) {
+    return (
+      <DirectionCapture
+        baseUrl={connection.baseUrl}
+        view={views[viewIndex]}
+        index={viewIndex}
+        total={views.length}
+        facing={facing}
+        onCaptured={onCaptured}
+        onCancel={() => router.back()}
+      />
+    );
+  }
+
   return (
     <View style={styles.screen}>
-      <CameraView
-        ref={cameraRef}
-        style={StyleSheet.absoluteFill}
-        facing={settings?.facing_mode === 'user' ? 'front' : 'back'}
-        mode={mode}
-        videoQuality={videoQualityFor(settings)}
-        /* Audio is deliberately never captured, which also avoids asking for
-           the microphone at all. */
-        mute
-        /* The one still is taken after recording and should not announce
-           itself with a shutter the user did not ask for. */
-        animateShutter={false}
-        shutterSound={false}
-      />
+      {/* Only where there is a clip to record.
+          On a photographs-only round this camera has nothing to do - it exists
+          for the video and the single still taken after it - and mounting it
+          anyway was actively harmful: tapping Capture now unmounted it in the
+          same frame that DirectionCapture mounted its own, so two cameras
+          fought over the hardware during the handover and the first shot came
+          back "Failed to capture image". Not mounting it means there is no
+          handover at all. */}
+      {wantsVideo ? (
+        <CameraView
+          ref={cameraRef}
+          style={StyleSheet.absoluteFill}
+          facing={facing}
+          mode={mode}
+          videoQuality={videoQualityFor(settings)}
+          /* Audio is deliberately never captured, which also avoids asking for
+             the microphone at all. */
+          mute
+          /* The one still is taken after recording and should not announce
+             itself with a shutter the user did not ask for. */
+          animateShutter={false}
+          shutterSound={false}
+        />
+      ) : null}
 
       <View style={[styles.overlay, { paddingTop: insets.top + spacing.lg, paddingBottom: insets.bottom + spacing.xxl }]}>
         <View style={styles.topBar}>
@@ -315,14 +502,22 @@ function RecorderScreen() {
             </>
           ) : (
             <>
+              {/* Says why, rather than handing over a button that does
+                  nothing. A round with the video off and no originals set has
+                  nothing at all to capture, and "the button is dead" is the
+                  least debuggable thing an app can tell somebody. */}
               <Text style={styles.help}>
-                {`${formatCountdown(duration, t)} ${t.clipWillBeRecorded}`}
+                {nothingToCapture
+                  ? t.nothingToPhotograph
+                  : wantsVideo
+                    ? `${formatCountdown(duration, t)} ${t.clipWillBeRecorded}`
+                    : t.photographsOnlyRound}
               </Text>
               <PrimaryButton
-                label={t.startRecording}
-                icon="videocam"
-                onPress={start}
-                disabled={phase === 'loading' || !round}
+                label={wantsVideo ? t.startRecording : t.startPhotographs}
+                icon={wantsVideo ? 'videocam' : 'camera'}
+                onPress={wantsVideo ? start : startViews}
+                disabled={phase === 'loading' || !round || nothingToCapture}
                 loading={phase === 'loading'}
               />
             </>

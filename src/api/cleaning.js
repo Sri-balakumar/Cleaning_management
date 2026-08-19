@@ -57,8 +57,11 @@ export function fetchRecordings(baseUrl, { limit = 80, domain = [] } = {}) {
     method: 'search_read',
     args: [
       domain,
+      // video_filename and shot_count say what a round actually holds, which is
+      // no longer a given: it may be a clip, photographs, or both.
       ['id', 'slot_id', 'slot_date', 'user_id', 'started_at', 'duration_seconds',
-       'file_format', 'quality', 'file_size_mb', 'truncated', 'ai_status', 'can_manage'],
+       'file_format', 'quality', 'file_size_mb', 'truncated', 'ai_status', 'can_manage',
+       'video_filename', 'shot_count'],
     ],
     kwargs: { limit, order: 'slot_date desc, id desc' },
   });
@@ -72,6 +75,11 @@ const RECORDING_DETAIL_FIELDS = [
   'id', 'slot_id', 'slot_date', 'user_id', 'can_manage',
   'started_at', 'ended_at', 'duration_seconds', 'configured_duration_seconds', 'truncated',
   'video_filename', 'file_format', 'quality', 'mimetype', 'file_size_mb', 'width', 'height',
+  // What the round came to when it is photographs rather than a clip.
+  // match_level is computed and unstored on the server, which `read` returns
+  // perfectly well - it is the same field the photographs list bands from.
+  'frame_count', 'shot_count', 'shot_size', 'match_score', 'match_score_avg',
+  'match_worst_label', 'matched_at', 'match_level',
   'note',
   // Manager-only in the interface; the server decides who may read them.
   'ai_status', 'ai_score', 'ai_summary', 'ai_checked_at',
@@ -87,6 +95,80 @@ export async function fetchRecording(baseUrl, recordingId) {
   });
   return Array.isArray(rows) && rows.length ? rows[0] : null;
 }
+
+/**
+ * Everything about a round's photographs except the pictures.
+ *
+ * `image` is absent for the same reason it is absent from the originals' field
+ * list: four of them is megabytes of base64, and the card can be drawn from the
+ * names and scores alone while the thumbnails arrive after it.
+ */
+const SHOT_FIELDS = [
+  'id', 'direction', 'name', 'sequence',
+  // Which original this was measured against, so the two can be shown side by
+  // side - the comparison is the point, and one picture alone cannot make it.
+  'reference_image_id',
+  'match_score', 'match_level', 'match_error', 'matched_at',
+  'ai_verdict', 'ai_changes',
+];
+
+/**
+ * One round's photographs, in the order they were taken.
+ *
+ * Not sudo'd anywhere and not needing to be: a Cleaning User has read on this
+ * model and a record rule limits them to their own rounds, so this returns
+ * exactly what the person asking is allowed to see.
+ */
+export const fetchRecordingShots = (baseUrl, recordingId) =>
+  rpc(baseUrl, '/web/dataset/call_kw', {
+    model: 'cleaning.recording.shot',
+    method: 'search_read',
+    args: [[['recording_id', '=', Number(recordingId)]], SHOT_FIELDS],
+    kwargs: { order: 'sequence, id' },
+  });
+
+/** One photograph as base64, fetched when there is somewhere to show it. */
+export async function fetchShotImage(baseUrl, shotId) {
+  const rows = await rpc(baseUrl, '/web/dataset/call_kw', {
+    model: 'cleaning.recording.shot',
+    method: 'read',
+    args: [[Number(shotId)], ['image']],
+    kwargs: {},
+  });
+  const image = Array.isArray(rows) && rows.length ? rows[0].image : false;
+  return image || null;
+}
+
+/**
+ * Score this round's photographs against the originals as they stand now.
+ *
+ * Manager-only: action_recompute_match raises AccessError for anybody else, so
+ * the refusal is the server's and this needs no permission check of its own.
+ * Wanted after an original is replaced, or the thresholds are tuned.
+ */
+export const recomputeMatch = (baseUrl, recordingId) =>
+  rpc(baseUrl, '/web/dataset/call_kw', {
+    model: 'cleaning.recording',
+    method: 'action_recompute_match',
+    args: [[Number(recordingId)]],
+    kwargs: {},
+  });
+
+/**
+ * Send this round's pictures for AI review.
+ *
+ * Deliberately on demand, exactly as the web module has it: a review costs
+ * money on a hosted model and time on a local one, and nobody should be
+ * surprised by either. The server returns a display_notification action, which
+ * is of no use to the app and is simply ignored.
+ */
+export const analyseWithAi = (baseUrl, recordingId) =>
+  rpc(baseUrl, '/web/dataset/call_kw', {
+    model: 'cleaning.recording',
+    method: 'action_ai_analyse',
+    args: [[Number(recordingId)]],
+    kwargs: {},
+  });
 
 /**
  * Delete recordings. Managers only -- the ACL withholds unlink from a regular
@@ -122,12 +204,21 @@ export function toServerDatetime(date) {
 }
 
 /**
- * Send one recorded clip.
+ * Send one round: the clip, if there is one, and the photographs of each view.
  *
  * Uses XMLHttpRequest rather than fetch purely for `upload.onprogress` -- fetch
  * exposes no upload progress, and a minute of video over office wifi is far too
  * long to show nothing. The stills go alongside as `frame_N`; the server reads
  * any number of them and uses them for its review.
+ *
+ * `videoUri` is optional. A manager may switch the video off entirely, and the
+ * round is then the photographs alone - so the video part is left out rather
+ * than sent empty, and the fields that describe a video go as zeroes because
+ * that is what the server records when there is none.
+ *
+ * `photos` is `[{ key, uri }]`, one per view, and goes as `photo_<key>`. Only
+ * the views the server asked for should be in it: it drops a photograph of a
+ * view that has no original and says so in `ignored_photos`.
  */
 export function uploadRecording(baseUrl, payload, onProgress) {
   const {
@@ -143,6 +234,7 @@ export function uploadRecording(baseUrl, payload, onProgress) {
     height,
     truncated,
     frames = [],
+    photos = [],
   } = payload;
 
   const form = new FormData();
@@ -150,22 +242,31 @@ export function uploadRecording(baseUrl, payload, onProgress) {
   form.append('slot_id', String(slotId));
   form.append('started_at', toServerDatetime(startedAt));
   form.append('ended_at', toServerDatetime(endedAt));
-  form.append('duration_seconds', String(Math.round(durationSeconds)));
+  form.append('duration_seconds', String(Math.round(durationSeconds || 0)));
   form.append('width', String(width || 0));
   form.append('height', String(height || 0));
-  form.append('mimetype', mimetype);
-  form.append('file_format', fileFormat);
+  form.append('mimetype', mimetype || '');
+  form.append('file_format', fileFormat || '');
   form.append('truncated', truncated ? '1' : '0');
   form.append('capture_mode', 'mobile');
-  form.append('video', {
-    uri: videoUri,
-    name: `round.${fileFormat}`,
-    type: mimetype,
-  });
+  if (videoUri) {
+    form.append('video', {
+      uri: videoUri,
+      name: `round.${fileFormat}`,
+      type: mimetype,
+    });
+  }
   frames.forEach((uri, index) => {
     form.append(`frame_${index}`, {
       uri,
       name: `frame_${index}.jpg`,
+      type: 'image/jpeg',
+    });
+  });
+  photos.forEach(({ key, uri }) => {
+    form.append(`photo_${key}`, {
+      uri,
+      name: `${key}.jpg`,
       type: 'image/jpeg',
     });
   });

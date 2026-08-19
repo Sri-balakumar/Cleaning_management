@@ -10,10 +10,22 @@
                 <field name="slot_id"/>
                 <field name="user_id" widget="many2one_avatar_user"/>
                 <field name="started_at"/>
-                <field name="duration_seconds"/>
-                <field name="file_format"/>
-                <field name="quality" optional="show"/>
-                <field name="file_size_mb" sum="Total (MB)"/>
+                <!-- Hidden by default now that a round need not be a clip: on a
+                     photographs-only office every one of these is blank, and a
+                     list of blanks looks like a list of failures. They are one
+                     click away in the optional-columns menu for anybody who
+                     does record video. -->
+                <field name="duration_seconds" optional="hide"/>
+                <field name="file_format" optional="hide"/>
+                <field name="quality" optional="hide"/>
+                <field name="file_size_mb" sum="Total (MB)" optional="hide"/>
+                <!-- What a round is actually judged on. -->
+                <field name="shot_count" optional="show"/>
+                <field name="match_score" optional="show" widget="progressbar"/>
+                <field name="match_level" optional="show" widget="badge"
+                       decoration-danger="match_level == 'alert'"
+                       decoration-warning="match_level == 'warn'"
+                       decoration-success="match_level == 'ok'"/>
                 <field name="ai_status" optional="show"/>
                 <field name="ai_score" optional="hide" widget="progressbar"/>
                 <field name="truncated" optional="hide"/>
@@ -58,6 +70,14 @@
                             invisible="not truncated or match_level in ['alert', 'warn']"/>
                     <field name="match_level" invisible="1"/>
                     <field name="shot_count" invisible="1"/>
+                    <!-- Up here rather than beside the file fields, because it
+                         is what decides whether those fields are shown at all -
+                         and a modifier cannot depend on a field that is only
+                         present inside the block it is hiding. The filename
+                         rather than video_file itself: testing the binary would
+                         have the form load the whole video to find out whether
+                         there is one. -->
+                    <field name="video_filename" invisible="1"/>
                     <!-- Technical: drives the read-only state below. -->
                     <field name="can_manage" invisible="1"/>
                     <div class="oe_title">
@@ -67,27 +87,54 @@
 
                     <!-- The point of opening a recording is to watch it, so the
                          player goes first. The binary field further down is kept
-                         for downloading a copy. -->
-                    <widget name="cleaning_video_player"/>
+                         for downloading a copy.
+
+                         Unless there is nothing to watch. With the video
+                         switched off a round is the photographs and nothing
+                         else, and an empty player above a File section full of
+                         blanks reads as a recording that failed rather than as
+                         one that was never meant to exist. -->
+                    <widget name="cleaning_video_player"
+                            invisible="not video_filename"/>
+                    <div class="alert alert-info" role="alert"
+                         invisible="video_filename">
+                        <strong>Photographs only.</strong>
+                        The video is switched off for this office, so this round
+                        is its photographs. They are below, each beside the
+                        original it was compared against.
+                    </div>
                     <group>
                         <group string="Recording">
                             <field name="user_id" readonly="1" widget="many2one_avatar_user"/>
                             <field name="started_at"/>
                             <field name="ended_at"/>
-                            <field name="duration_seconds"/>
-                            <field name="configured_duration_seconds"/>
-                            <field name="truncated"/>
+                            <!-- Every one of these describes a clip. With none
+                                 recorded they are zeroes that mean nothing, and
+                                 a zero is read as a measurement. -->
+                            <field name="duration_seconds"
+                                   invisible="not video_filename"/>
+                            <field name="configured_duration_seconds"
+                                   invisible="not video_filename"/>
+                            <field name="truncated"
+                                   invisible="not video_filename"/>
                         </group>
-                        <group string="File">
+                        <group string="File" invisible="not video_filename">
                             <field name="video_file" filename="video_filename"
                                    readonly="1"/>
-                            <field name="video_filename" invisible="1"/>
                             <field name="file_format"/>
                             <field name="quality"/>
                             <field name="mimetype"/>
                             <field name="file_size_mb"/>
                             <field name="width"/>
                             <field name="height"/>
+                        </group>
+                        <group string="Photographs" invisible="video_filename">
+                            <field name="shot_size" string="Photograph Bytes"
+                                   invisible="1"/>
+                            <field name="match_score"/>
+                            <field name="match_score_avg"/>
+                            <field name="match_worst_label"/>
+                            <field name="matched_at"/>
                         </group>
                     </group>
                     <notebook>
@@ -104,7 +151,13 @@
                                 </group>
                             </group>
 
-                            <!-- Both pictures on one card, via kanban_image, so
+                            <!-- Both pictures on one card, addressed by URL.
+                                 NOT kanban_image(): that helper no longer exists
+                                 in this version and the card threw
+                                 "kanban_image is not a function", taking the
+                                 whole form down with it. /web/image is the
+                                 documented way and is access-checked per record
+                                 by ir.binary, so
                                  no custom component is needed to show them side
                                  by side. -->
                             <field name="shot_ids" nolabel="1" readonly="1">
@@ -128,12 +181,12 @@
                                                 </div>
                                                 <div class="col-6 pe-1">
                                                     <div class="text-muted small">Original</div>
-                                                    <img t-att-src="kanban_image('cleaning.reference.image', 'image', record.reference_image_id.raw_value)"
+                                                    <img t-att-src="'/web/image/cleaning.reference.image/' + record.reference_image_id.raw_value + '/image'"
                                                          class="img img-fluid" alt="Original"/>
                                                 </div>
                                                 <div class="col-6 ps-1">
                                                     <div class="text-muted small">Today</div>
-                                                    <img t-att-src="kanban_image('cleaning.recording.shot', 'image', record.id.raw_value)"
+                                                    <img t-att-src="'/web/image/cleaning.recording.shot/' + record.id.raw_value + '/image'"
                                                          class="img img-fluid" alt="Today"/>
                                                 </div>
                                                 <div class="col-12 mt-1">

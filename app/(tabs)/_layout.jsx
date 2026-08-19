@@ -44,13 +44,24 @@ export default function TabsLayout() {
         tabBarInactiveTintColor: colors.onGradientMuted,
         // Painted behind the bar so the curve clips it, rather than being the
         // bar's own background colour, which no radius would round.
+        //
+        // It stops at `insets.bottom` rather than filling the bar, so the
+        // gradient never reaches the strip the system navigation buttons sit
+        // in. Edge-to-edge makes that bar transparent and draws the app behind
+        // it, so whatever is painted there IS the colour behind the buttons -
+        // and asking Android for a navigation bar colour instead would do
+        // nothing at all, since setBackgroundColorAsync is unsupported once
+        // edge-to-edge is on. The strip below is left showing the plain app
+        // background, which is what makes the curved bar read as floating.
         tabBarBackground: () => (
-          <LinearGradient
-            colors={colors.gradientButton}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 0 }}
-            style={StyleSheet.absoluteFill}
-          />
+          <View style={[StyleSheet.absoluteFill, styles.barBackdrop]}>
+            <LinearGradient
+              colors={colors.gradientButton}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 0 }}
+              style={[styles.barGradient, { bottom: insets.bottom }]}
+            />
+          </View>
         ),
         tabBarLabelStyle: styles.label,
         tabBarItemStyle: styles.item,
@@ -78,8 +89,11 @@ export default function TabsLayout() {
         name="recordings"
         options={{
           title: t.tabRecordings,
+          // Not a video camera: what is listed here is a round, which may carry
+          // photographs, a clip, or both. TabIcon appends "-outline" when the
+          // tab is idle, so the name has to be one with both variants.
           tabBarIcon: ({ color, focused }) => (
-            <TabIcon name="videocam" focused={focused} color={color} />
+            <TabIcon name="film" focused={focused} color={color} />
           ),
         }}
       />
@@ -117,6 +131,10 @@ const styles = StyleSheet.create({
       android: { elevation: 0 },
     }),
   },
+  // The strip the system navigation buttons sit in, painted the app's own
+  // background so they never sit on the brand gradient.
+  barBackdrop: { backgroundColor: colors.background },
+  barGradient: { position: 'absolute', left: 0, right: 0, top: 0 },
   item: { paddingTop: 0 },
   indicator: {
     width: 64,

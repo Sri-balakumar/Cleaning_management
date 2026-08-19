@@ -21,7 +21,7 @@ import { PrimaryButton } from './PrimaryButton';
  * Treating them as interchangeable is how a countdown ends up reading
  * `undefined`, so each mode reads only the fields its own payload carries.
  */
-export function OpenRoundCard({ mode, round, countdown, onRecord, denyMessage, done, total }) {
+export function OpenRoundCard({ mode, round, countdown, capturesOnly, onRecord, denyMessage, done, total }) {
   const { t, rtlRow, rtlText } = useT();
 
   if (mode === 'done') {
@@ -80,8 +80,8 @@ export function OpenRoundCard({ mode, round, countdown, onRecord, denyMessage, d
       {isOpen ? (
         round.can_record ? (
           <PrimaryButton
-            label={t.recordNow}
-            icon="videocam"
+            label={capturesOnly ? t.captureNow : t.recordNow}
+            icon={capturesOnly ? 'camera' : 'videocam'}
             variant="ghost"
             onPress={() => onRecord(round)}
             style={styles.action}

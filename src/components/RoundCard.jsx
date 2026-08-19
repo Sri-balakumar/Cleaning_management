@@ -13,7 +13,7 @@ const STATUS = {
   missed: { key: 'statusMissed', color: colors.danger, bg: colors.dangerBg },
 };
 
-export function RoundCard({ round, countdown, pending, canRecord, onRecord, onWatch }) {
+export function RoundCard({ round, countdown, pending, canRecord, capturesOnly, onRecord, onWatch }) {
   const { t, rtlRow, rtlText } = useT();
   const status = STATUS[round.state] ?? STATUS.upcoming;
   const untilOpen = countdown ? countdown.untilOpen : round.seconds_until_open;
@@ -77,8 +77,8 @@ export function RoundCard({ round, countdown, pending, canRecord, onRecord, onWa
           </Text>
           {canRecord ? (
             <PrimaryButton
-              label={t.recordNow}
-              icon="videocam"
+              label={capturesOnly ? t.captureNow : t.recordNow}
+              icon={capturesOnly ? 'camera' : 'videocam'}
               onPress={() => onRecord(round)}
               style={styles.action}
             />
@@ -95,8 +95,8 @@ export function RoundCard({ round, countdown, pending, canRecord, onRecord, onWa
             {t.opensIn} <Text style={styles.strong}>{formatCountdown(untilOpen, t)}</Text>
           </Text>
           <PrimaryButton
-            label={t.record}
-            icon="videocam"
+            label={capturesOnly ? t.capture : t.record}
+            icon={capturesOnly ? 'camera' : 'videocam'}
             disabled
             onPress={() => {}}
             variant="ghost"

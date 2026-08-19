@@ -4,18 +4,11 @@ from odoo import api, fields, models
 from odoo.tools.image import image_process
 
 from . import cleaning_image_compare as compare
-from .cleaning_config import DIRECTIONS, MATCH_LEVELS
+from .cleaning_config import (
+    DIRECTIONS, MATCH_LEVELS, STORED_LONG_EDGE, STORED_QUALITY,
+)
 
 _logger = logging.getLogger(__name__)
-
-# Photographs are stored at this size, not at whatever the phone produced.
-#
-# A 12 megapixel JPEG is around 5 MB. Four a day for ninety days is 1.8 GB per
-# company, for detail nobody will ever look at: 1600px is far more than enough
-# to see that a bag is missing, and it also bounds what has to be base64'd into
-# an AI request later.
-STORED_LONG_EDGE = 1600
-STORED_QUALITY = 82
 
 
 class CleaningRecordingShot(models.Model):

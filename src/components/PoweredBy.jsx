@@ -14,22 +14,14 @@ const version = Constants.expoConfig?.version;
  *
  * Pass `onGradient` on screens that sit on the brand gradient.
  *
- * `versionOnly` drops the attribution and keeps the version. Login uses it,
- * because the company logo already sits at the top of that screen and repeating
- * the name below it says nothing new -- but the version still earns its place,
- * since it is what someone reads out when reporting a problem.
+ * The same line on every screen that carries one. Login once showed the version
+ * alone, on the grounds that the logo above it already said who made this - but
+ * the attribution and the version are one credit, and reading them differently
+ * in two places is the kind of small inconsistency people notice.
  */
-export function PoweredBy({ onGradient, versionOnly, style }) {
+export function PoweredBy({ onGradient, style }) {
   const { t } = useT();
   const textStyle = [styles.text, onGradient ? styles.textOnGradient : null];
-
-  if (versionOnly) {
-    return version ? (
-      <View style={[styles.row, style]}>
-        <Text style={textStyle}>v{version}</Text>
-      </View>
-    ) : null;
-  }
 
   return (
     <View style={[styles.row, style]}>

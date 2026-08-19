@@ -138,7 +138,15 @@ class CleaningManagementController(http.Controller):
                 return self._json_error('not_allowed', refusal, status=403)
 
             required = config._required_directions()
-            if not config.video_enabled and not required:
+            # "Nothing to record" means no clip AND no view worth photographing,
+            # which is the ASKABLE list - not the required one.
+            #
+            # Gating this on required refused every photographs-only round in
+            # any office that had not switched `require_photos` on, however many
+            # originals it had set up: required is empty whenever the setting is
+            # off, so the server told somebody who had just walked the room and
+            # photographed it that there was nothing to record.
+            if not config.video_enabled and not config._askable_directions():
                 return self._json_error('not_configured', request.env._(
                     "This round would record nothing at all: the video is "
                     "switched off and no original photographs have been set "

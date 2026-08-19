@@ -6,7 +6,7 @@ from odoo import api, fields, models
 from odoo.exceptions import AccessError, UserError, ValidationError
 
 from .cleaning_config import (
-    DIRECTION_SEQUENCE, MATCH_LEVELS, MIN_PHOTO_BYTES,
+    DIRECTION_SEQUENCE, MATCH_LEVELS, MIN_PHOTO_BYTES, PHOTO_ROUND_SECONDS,
     format_float_time,
 )
 
@@ -352,10 +352,18 @@ class CleaningRecording(models.Model):
                 "Reload the page and record again."))
 
         # And it must not be back-dated: the start time may only be as far in
-        # the past as one full recording plus the grace period allows.
+        # the past as the round itself plus the grace period allows.
+        #
+        # With the video off there is no duration to allow for - duration_seconds
+        # describes a clip and is zero - so the walk is what has to be allowed
+        # instead. Left as it was, a photographs-only round timed from its first
+        # photograph was refused as back-dated the moment somebody took more than
+        # the grace period to walk the room, which is most of them.
         now = fields.Datetime.now()
+        round_seconds = (config.duration_seconds if config.video_enabled
+                         else PHOTO_ROUND_SECONDS)
         oldest_allowed = now - relativedelta(
-            seconds=config.duration_seconds + max(0, config.upload_grace_seconds))
+            seconds=round_seconds + max(0, config.upload_grace_seconds))
         if started_at < oldest_allowed or started_at > now + relativedelta(minutes=5):
             raise ValidationError(self.env._(
                 "This recording's start time is not close enough to the "

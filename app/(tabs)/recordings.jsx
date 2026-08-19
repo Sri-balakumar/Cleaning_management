@@ -14,6 +14,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { AppError } from '../../src/api/errors';
 import { deleteRecordings, fetchRecordings } from '../../src/api/cleaning';
+import { fetchAiConfig } from '../../src/api/config';
 import { useAuth } from '../../src/auth/AuthContext';
 import { RequireAuth } from '../../src/auth/RequireAuth';
 import { useDialog } from '../../src/components/AppDialog';
@@ -60,6 +61,23 @@ function formatGroupDate(isoDate, t) {
 
 const relationName = (value) => (Array.isArray(value) ? value[1] : '');
 
+/**
+ * What this round actually holds, at a glance.
+ *
+ * A round is no longer always a clip: it may be a video, one photograph, or
+ * several. A play triangle on a row that has no video to play is a small lie,
+ * and the whole point of the list is to be scannable.
+ *
+ * The clip wins when a round has both, because that is the thing you would open
+ * it to watch.
+ */
+function contentIcon(item) {
+  if (item.video_filename) return 'play';
+  if (item.shot_count > 1) return 'images';
+  if (item.shot_count === 1) return 'image';
+  return 'document-outline';
+}
+
 // Selection fields come back as raw values, so their labels are mapped here.
 const QUALITY_KEYS = { low: 'qualityLow', medium: 'qualityMedium', high: 'qualityHigh' };
 const AI_KEYS = { not_run: 'aiNotRun', done: 'aiDone', failed: 'aiFailed' };
@@ -104,6 +122,8 @@ function RecordingsScreen() {
   // Empty set means normal browsing; entering selection puts an id in here.
   const [selected, setSelected] = useState([]);
   const [selecting, setSelecting] = useState(false);
+  // An "AI review" badge on every row is noise when nobody switched it on.
+  const [aiEnabled, setAiEnabled] = useState(false);
 
   // Deleting is a manager's job; the ACL refuses unlink for everyone else, so
   // the interface only offers it when the server says this person may.
@@ -118,39 +138,6 @@ function RecordingsScreen() {
     setSelected((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
   }, []);
 
-  const confirmDelete = useCallback(() => {
-    if (!selected.length) return;
-    confirm({
-      title: t.deleteRecordings,
-      // Says what deletion actually does, which is the reason for doing it.
-      message: t.deleteRecordingsBody,
-      icon: 'trash-outline',
-      tone: 'danger',
-      actions: [
-        {
-          label: t.delete,
-          style: 'destructive',
-          onPress: () => {
-            void (async () => {
-              try {
-                await deleteRecordings(connection.baseUrl, selected);
-                exitSelection();
-                await load();
-              } catch (e) {
-                setError(translateError(t, AppError.from(e)));
-              }
-            })();
-          },
-        },
-        { label: t.cancel, style: 'cancel' },
-      ],
-    });
-  }, [confirm, connection, exitSelection, load, selected, t]);
-
-  useEffect(() => {
-    log('screen', 'recordings mounted');
-  }, []);
-
   const load = useCallback(async () => {
     setError(null);
     try {
@@ -158,6 +145,10 @@ function RecordingsScreen() {
       // sees only their own recordings or everybody's.
       const result = await fetchRecordings(connection.baseUrl);
       setRows(result || []);
+      // Never fatal: not knowing leaves the badges off, which is the safe way
+      // round.
+      const ai = await fetchAiConfig(connection.baseUrl).catch(() => null);
+      setAiEnabled(!!ai?.enabled);
       log('recordings', `loaded ${(result || []).length} rows`);
     } catch (e) {
       setError(translateError(t, AppError.from(e)));
@@ -165,6 +156,50 @@ function RecordingsScreen() {
       setLoading(false);
     }
   }, [connection, t]);
+
+  /**
+   * Delete whichever rounds were given, after asking.
+   *
+   * One function for the row's own trash button and for the multi-select bar,
+   * because deleting one and deleting six differ only in the number of ids -
+   * and the warning is the same either way, since it is about what deletion
+   * MEANS rather than how much of it is happening.
+   */
+  const confirmDelete = useCallback(
+    (ids) => {
+      if (!ids?.length) return;
+      confirm({
+        title: t.deleteRecordings,
+        // Says what deletion actually does, which is the reason for doing it.
+        message: t.deleteRecordingsBody,
+        icon: 'trash-outline',
+        tone: 'danger',
+        actions: [
+          {
+            label: t.delete,
+            style: 'destructive',
+            onPress: () => {
+              void (async () => {
+                try {
+                  await deleteRecordings(connection.baseUrl, ids);
+                  exitSelection();
+                  await load();
+                } catch (e) {
+                  setError(translateError(t, AppError.from(e)));
+                }
+              })();
+            },
+          },
+          { label: t.cancel, style: 'cancel' },
+        ],
+      });
+    },
+    [confirm, connection, exitSelection, load, t],
+  );
+
+  useEffect(() => {
+    log('screen', 'recordings mounted');
+  }, []);
 
   useFocusEffect(
     useCallback(() => {
@@ -206,7 +241,7 @@ function RecordingsScreen() {
                 {selected.length} {t.selectedCount}
               </Text>
               <Pressable
-                onPress={confirmDelete}
+                onPress={() => confirmDelete(selected)}
                 hitSlop={12}
                 disabled={!selected.length}
                 accessibilityRole="button"
@@ -222,6 +257,19 @@ function RecordingsScreen() {
               <Text style={styles.count}>
                 {rows.length ? `${rows.length} ${t.shownCount}` : ''}
               </Text>
+              {/* Selecting several was only reachable by holding a row down,
+                  which is not something anybody finds without being told. */}
+              {canManage && rows.length ? (
+                <Pressable
+                  onPress={() => setSelecting(true)}
+                  hitSlop={12}
+                  accessibilityRole="button"
+                  accessibilityLabel={t.selectMany}
+                  style={styles.headerAction}
+                >
+                  <Ionicons name="checkbox-outline" size={21} color={colors.white} />
+                </Pressable>
+              ) : null}
             </>
           )}
         </View>
@@ -263,6 +311,8 @@ function RecordingsScreen() {
                   }
                 : undefined
             }
+            onDeleteRecording={canManage ? (id) => confirmDelete([id]) : undefined}
+            aiEnabled={aiEnabled}
             selecting={selecting}
             selected={selected}
             t={t}
@@ -281,6 +331,8 @@ function DateGroup({
   onToggle,
   onOpenRecording,
   onLongPressRecording,
+  onDeleteRecording,
+  aiEnabled,
   selecting,
   selected,
   t,
@@ -339,7 +391,7 @@ function DateGroup({
                       ? selected.includes(item.id)
                         ? 'checkbox'
                         : 'square-outline'
-                      : 'play'
+                      : contentIcon(item)
                   }
                   size={16}
                   color={colors.primary}
@@ -358,16 +410,28 @@ function DateGroup({
                   {relationName(item.user_id)}
                 </Text>
 
+                {/* Every one of the clip's numbers is zero or blank on a
+                    photographs-only round, which read as "0s" and a row of
+                    nothing. Say what the round holds instead. */}
                 <Text style={[styles.rowMeta, rtlText]} numberOfLines={1}>
-                  {item.duration_seconds}
-                  {t.unitSecond}
-                  {item.file_format ? ` · ${String(item.file_format).toUpperCase()}` : ''}
-                  {QUALITY_KEYS[item.quality] ? ` · ${t[QUALITY_KEYS[item.quality]]}` : ''}
-                  {item.file_size_mb ? ` · ${item.file_size_mb} MB` : ''}
+                  {item.video_filename ? (
+                    <>
+                      {item.duration_seconds}
+                      {t.unitSecond}
+                      {item.file_format ? ` · ${String(item.file_format).toUpperCase()}` : ''}
+                      {QUALITY_KEYS[item.quality] ? ` · ${t[QUALITY_KEYS[item.quality]]}` : ''}
+                      {item.file_size_mb ? ` · ${item.file_size_mb} MB` : ''}
+                      {item.shot_count ? ` · ${item.shot_count} ${t.photographMany}` : ''}
+                    </>
+                  ) : (
+                    `${item.shot_count || 0} ${
+                      item.shot_count === 1 ? t.photographOne : t.photographMany
+                    }${item.file_size_mb ? ` · ${item.file_size_mb} MB` : ''}`
+                  )}
                 </Text>
 
                 <View style={[styles.badges, rtlRow]}>
-                  {AI_KEYS[item.ai_status] ? (
+                  {aiEnabled && AI_KEYS[item.ai_status] ? (
                     <View
                       style={[
                         styles.badge,
@@ -394,7 +458,22 @@ function DateGroup({
                 </View>
               </View>
 
-              <Ionicons name="chevron-forward" size={16} color={colors.textMuted} />
+              {/* Not offered while selecting: the bar at the top is already
+                  the delete for that mode, and two of them a thumb apart would
+                  be two ways to destroy different things at once. */}
+              {onDeleteRecording && !selecting ? (
+                <Pressable
+                  onPress={() => onDeleteRecording(item.id)}
+                  hitSlop={10}
+                  accessibilityRole="button"
+                  accessibilityLabel={t.delete}
+                  style={styles.rowDelete}
+                >
+                  <Ionicons name="trash-outline" size={18} color={colors.danger} />
+                </Pressable>
+              ) : (
+                <Ionicons name="chevron-forward" size={16} color={colors.textMuted} />
+              )}
             </Pressable>
           ))
         : null}
@@ -454,6 +533,8 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     borderTopColor: colors.border,
   },
+  headerAction: { marginLeft: spacing.md },
+  rowDelete: { padding: spacing.xs },
   pressed: { opacity: 0.65 },
   thumb: {
     width: 34,

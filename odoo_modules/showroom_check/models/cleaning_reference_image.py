@@ -1,10 +1,14 @@
 import base64
 import binascii
+import logging
 
 from odoo import api, fields, models
+from odoo.tools.image import image_process
 
 from . import cleaning_image_compare as compare
-from .cleaning_config import DIRECTIONS
+from .cleaning_config import DIRECTIONS, STORED_LONG_EDGE, STORED_QUALITY
+
+_logger = logging.getLogger(__name__)
 
 
 class CleaningReferenceImage(models.Model):
@@ -84,12 +88,20 @@ class CleaningReferenceImage(models.Model):
 
     # ------------------------------------------------------------------
     def _prepare_signature(self, vals):
-        """Refresh the stored comparison values when the picture changes.
+        """Bound the picture, then refresh the stored comparison values.
 
         Done on write rather than as a computed field because it is expensive
         (a full decode) and depends on bytes rather than on other fields. A
         picture that cannot be read leaves both empty, which the comparison
         reports as "not prepared yet" instead of failing somebody's round.
+
+        Downscaled to exactly the bounds a round's photograph gets, and the
+        resized bytes are written back into vals - so the picture that is
+        stored, the picture the signature was computed from, and the picture an
+        AI review is shown are all the same one. Without this an original is
+        kept at whatever the camera produced: a 12 megapixel phone photograph is
+        around 5 MB, sent back in full every time somebody opens the view, and
+        compared against round photographs that were bounded on the way in.
         """
         if 'image' not in vals:
             return
@@ -103,6 +115,20 @@ class CleaningReferenceImage(models.Model):
             vals['signature'] = False
             vals['phash'] = False
             return
+        try:
+            raw = image_process(raw, size=(STORED_LONG_EDGE, STORED_LONG_EDGE),
+                                quality=STORED_QUALITY, output_format='JPEG')
+            vals['image'] = base64.b64encode(raw)
+        except Exception:  # noqa: BLE001 - Pillow and Odoo both raise widely
+            # Keep what arrived, the way _attach_image does. A picture that
+            # cannot be resized is still a picture, and refusing a manager's
+            # original over it would be absurd - the signature below is computed
+            # from these same bytes either way, so the two cannot disagree.
+            # No id in the message: this runs from create() on an empty
+            # recordset and from write() on a possibly multi-record one.
+            _logger.warning(
+                "Showroom Check: could not resize an original; storing it as "
+                "it arrived", exc_info=True)
         signature, phash = compare.signature_for(raw)
         vals['signature'] = signature or False
         vals['phash'] = ('%016x' % phash) if phash is not None else False

@@ -586,6 +586,85 @@ class TestCleaningManagement(TransactionCase):
         self.assertFalse(shot.match_error)
         self.assertTrue(shot.matched_at, "stored is not enough - it was scored")
 
+    def test_an_original_is_bounded_on_the_way_in(self):
+        """Otherwise a 12 megapixel original is kept whole and compared against
+        round photographs that were bounded on the way in."""
+        big = Image.new('RGB', (3000, 2250))
+        pixels = big.load()
+        for x in range(0, 3000, 3):
+            for y in range(0, 2250, 3):
+                pixels[x, y] = ((x * 5) % 256, (y * 3) % 256, (x + y) % 256)
+        buffer = io.BytesIO()
+        big.save(buffer, format='JPEG', quality=95)
+
+        reference = self.config.reference_image_ids.filtered(
+            lambda r: r.direction == 'front')
+        reference.write({'image': base64.b64encode(buffer.getvalue())})
+
+        stored = Image.open(io.BytesIO(base64.b64decode(reference.image)))
+        self.assertLessEqual(max(stored.size), 1600)
+        # And the comparison values came from the bytes that were kept, not
+        # from the ones that arrived.
+        self.assertTrue(reference.signature)
+        self.assertTrue(reference.phash)
+
+    def test_a_photographs_only_round_is_not_refused_as_unconfigured(self):
+        """The upload route's "nothing to record" guard reads the askable list.
+
+        Read off _required_directions it refused every photographs-only round in
+        an office that had not switched require_photos on - however many
+        originals were set - because required is empty whenever the setting is
+        off. Somebody who had just walked the room photographing it was told
+        there was nothing to record.
+        """
+        self.config.write({'video_enabled': False, 'require_photos': False})
+        self._set_original('front')
+
+        # What the controller tests, in the same order.
+        self.assertEqual(self.config._required_directions(), [])
+        self.assertEqual(self.config._askable_directions(), ['front'])
+        self.assertFalse(
+            not self.config.video_enabled and not self.config._askable_directions(),
+            "a round with an original set has something to record",
+        )
+
+    def test_a_round_with_no_video_and_no_originals_is_refused(self):
+        """The guard still has to fire when there really is nothing."""
+        self.config.write({'video_enabled': False})
+        self.config.reference_image_ids.write({'image': False})
+
+        self.assertTrue(
+            not self.config.video_enabled and not self.config._askable_directions())
+
+    def test_the_turn_between_views_is_worked_out_here(self):
+        """The shape of the round belongs to the server, not to a client.
+
+        front then left is a quarter turn to the LEFT. A client that assumed
+        four evenly spaced views would send somebody right instead, to a wall
+        nobody is checking - which is exactly why this is not the client's sum
+        to do.
+        """
+        self._set_original('front')
+        self._set_original('left')
+
+        rows = self.config._direction_payload()
+
+        self.assertEqual([row['key'] for row in rows], ['front', 'left'])
+        # Nothing to have turned from yet.
+        self.assertIsNone(rows[0]['turn'])
+        self.assertEqual(rows[1]['turn'], {'degrees': 90, 'clockwise': False})
+
+    def test_the_turn_is_the_short_way_round(self):
+        self._set_original('front')
+        self._set_original('right')
+        self._set_original('back')
+
+        rows = self.config._direction_payload()
+
+        self.assertEqual([row['key'] for row in rows], ['front', 'right', 'back'])
+        self.assertEqual(rows[1]['turn'], {'degrees': 90, 'clockwise': True})
+        self.assertEqual(rows[2]['turn'], {'degrees': 90, 'clockwise': True})
+
     def test_the_client_is_only_offered_views_that_have_an_original(self):
         """So nobody is asked for a picture the server is going to drop."""
         self._set_original('front')

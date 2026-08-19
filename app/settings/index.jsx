@@ -10,11 +10,13 @@ import {
   createSlot,
   deleteSlot,
   fetchConfig,
+  fetchReferenceImages,
   fetchSlots,
   formatFloatTime,
   readUserNames,
   searchUsers,
   writeConfig,
+  writeReferenceImage,
   writeSlot,
 } from '../../src/api/config';
 import { useAuth } from '../../src/auth/AuthContext';
@@ -24,6 +26,7 @@ import { ErrorBanner } from '../../src/components/ErrorBanner';
 import { GradientBackground, GradientOrbs } from '../../src/components/GradientBackground';
 import { InfoCard } from '../../src/components/InfoRow';
 import { PrimaryButton } from '../../src/components/PrimaryButton';
+import { SectionTabs } from '../../src/components/SectionTabs';
 import {
   NumberRow,
   OptionSheet,
@@ -32,8 +35,37 @@ import {
   TimeRow,
   ToggleRow,
 } from '../../src/components/SettingRows';
+import { ShowroomViews } from '../../src/components/ShowroomViews';
 import { translateError, useT } from '../../src/i18n/LanguageProvider';
 import { colors, radius, spacing, typography } from '../../src/theme';
+
+/**
+ * Exactly what a save writes, built from the record on screen.
+ *
+ * Its own function because two things need it and they must not drift: the save
+ * itself, and the check for whether anything has changed since it was loaded.
+ */
+function configPayload(config) {
+  return {
+    timezone: config.timezone,
+    video_enabled: !!config.video_enabled,
+    duration_value: Number(config.duration_value) || 0,
+    duration_unit: config.duration_unit,
+    video_format: config.video_format,
+    video_quality: config.video_quality,
+    camera_facing: config.camera_facing,
+    max_upload_mb: Number(config.max_upload_mb) || 0,
+    allowed_user_mode: config.allowed_user_mode,
+    allowed_user_ids: [[6, 0, config.allowed_user_ids || []]],
+    upload_grace_seconds: Number(config.upload_grace_seconds) || 0,
+    retention_number: Number(config.retention_number) || 0,
+    retention_unit: config.retention_unit,
+    retention_mode: config.retention_mode,
+    require_photos: !!config.require_photos,
+    match_warn_threshold: Number(config.match_warn_threshold) || 0,
+    match_alert_threshold: Number(config.match_alert_threshold) || 0,
+  };
+}
 
 export default function SettingsRoute() {
   return (
@@ -51,26 +83,35 @@ function SettingsScreen() {
   const { confirm } = useDialog();
 
   const [config, setConfig] = useState(null);
+  // What was loaded, kept so "has anything changed?" has something to ask.
+  const [baseline, setBaseline] = useState(null);
   const [slots, setSlots] = useState([]);
+  const [views, setViews] = useState([]);
   const [userNames, setUserNames] = useState({});
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState(null);
   const [notice, setNotice] = useState(null);
   const [tzOpen, setTzOpen] = useState(false);
+  // Which section is on screen. The keys are the web notebook's own page names,
+  // so the two stay recognisably the same form.
+  const [tab, setTab] = useState('schedule');
 
   const load = useCallback(async () => {
     setError(null);
     try {
       const cfg = await fetchConfig(connection.baseUrl);
       setConfig(cfg);
+      setBaseline(cfg);
       if (cfg) {
-        const [rows, users] = await Promise.all([
+        const [rows, users, originals] = await Promise.all([
           fetchSlots(connection.baseUrl, cfg.id),
           readUserNames(connection.baseUrl, cfg.allowed_user_ids || []),
+          fetchReferenceImages(connection.baseUrl, cfg.id),
         ]);
         setSlots(rows || []);
         setUserNames(Object.fromEntries((users || []).map((u) => [u.id, u.name])));
+        setViews(originals || []);
       }
     } catch (e) {
       setError(translateError(t, AppError.from(e)));
@@ -107,23 +148,23 @@ function SettingsScreen() {
   );
 
   const saveConfig = () =>
-    run(() =>
-      writeConfig(connection.baseUrl, config.id, {
-        timezone: config.timezone,
-        duration_value: Number(config.duration_value) || 0,
-        duration_unit: config.duration_unit,
-        video_format: config.video_format,
-        video_quality: config.video_quality,
-        camera_facing: config.camera_facing,
-        max_upload_mb: Number(config.max_upload_mb) || 0,
-        allowed_user_mode: config.allowed_user_mode,
-        allowed_user_ids: [[6, 0, config.allowed_user_ids || []]],
-        upload_grace_seconds: Number(config.upload_grace_seconds) || 0,
-        retention_number: Number(config.retention_number) || 0,
-        retention_unit: config.retention_unit,
-        retention_mode: config.retention_mode,
-      }),
-    );
+    run(() => writeConfig(connection.baseUrl, config.id, configPayload(config)));
+
+  /**
+   * Is there anything to save?
+   *
+   * Compared through configPayload, the same function the save itself is built
+   * from, so the two can never disagree about which fields count. Comparing a
+   * hand-written list of fields instead would eventually leave Save faded over
+   * a real unsaved change the day somebody adds a setting and updates only one
+   * of the two lists - a worse bug than the one being fixed.
+   */
+  const dirty = useMemo(() => {
+    if (!config || !baseline) return false;
+    return JSON.stringify(configPayload(config)) !== JSON.stringify(configPayload(baseline));
+  }, [baseline, config]);
+
+  const patchView = (id, values) => run(() => writeReferenceImage(connection.baseUrl, id, values));
 
   const addRound = () =>
     run(() =>
@@ -156,6 +197,18 @@ function SettingsScreen() {
         { label: t.cancel, style: 'cancel' },
       ],
     });
+
+  // In here rather than at module scope so the labels follow the language.
+  const tabs = useMemo(
+    () => [
+      { key: 'schedule', label: t.sectionDailyRounds },
+      { key: 'reference', label: t.sectionShowroomViews },
+      { key: 'recording', label: t.sectionRecording },
+      { key: 'access', label: t.sectionWhoCanRecord },
+      { key: 'retention', label: t.sectionKeeping },
+    ],
+    [t],
+  );
 
   const options = useMemo(
     () => ({
@@ -219,6 +272,10 @@ function SettingsScreen() {
         </View>
       </GradientBackground>
 
+      {/* Outside the ScrollView, so the strip stays put while a section scrolls
+          under it - which is how the notebook tabs behave on the web. */}
+      {config ? <SectionTabs tabs={tabs} value={tab} onChange={setTab} /> : null}
+
       <ScrollView
         contentContainerStyle={[styles.body, { paddingBottom: spacing.xxxl + insets.bottom }]}
         showsVerticalScrollIndicator={false}
@@ -237,6 +294,8 @@ function SettingsScreen() {
 
         {config ? (
           <>
+            {tab === 'schedule' ? (
+            <>
             <InfoCard title={t.sectionDailyRounds}>
               <SelectRow
                 label={t.officeTimezone}
@@ -266,8 +325,54 @@ function SettingsScreen() {
               disabled={saving}
               style={styles.addBtn}
             />
+            </>
+            ) : null}
 
+            {tab === 'reference' ? (
+            <InfoCard title={t.sectionShowroomViews}>
+              <ShowroomViews
+                baseUrl={connection.baseUrl}
+                views={views}
+                disabled={saving}
+                onWrite={patchView}
+              />
+              <ToggleRow
+                label={t.requirePhotos}
+                hint={t.requirePhotosHint}
+                value={config.require_photos}
+                onChange={(v) => set({ require_photos: v })}
+              />
+              <NumberRow
+                label={t.warnBelow}
+                value={config.match_warn_threshold}
+                onChange={(v) => set({ match_warn_threshold: v })}
+              />
+              <NumberRow
+                label={t.alertBelow}
+                hint={t.thresholdsHint}
+                value={config.match_alert_threshold}
+                onChange={(v) => set({ match_alert_threshold: v })}
+                last
+              />
+            </InfoCard>
+            ) : null}
+
+            {tab === 'recording' ? (
             <InfoCard title={t.sectionRecording}>
+              <ToggleRow
+                label={t.videoEnabled}
+                hint={t.videoEnabledHint}
+                value={config.video_enabled}
+                onChange={(v) => set({ video_enabled: v })}
+                last={!config.video_enabled}
+              />
+              {/* Everything below describes the video. With it off they are not
+                  in use, so they are put away rather than left sitting there
+                  inviting somebody to tune a clip that is never recorded. */}
+              {!config.video_enabled ? (
+                <Text style={[styles.hint, rtlText, styles.videoOff]}>{t.videoOffNote}</Text>
+              ) : (
+                <>
               <NumberRow
                 label={t.clipLength}
                 value={config.duration_value}
@@ -309,8 +414,12 @@ function SettingsScreen() {
                   ~{Number(config.estimated_size_mb || 0).toFixed(1)} MB
                 </Text>
               </View>
+                </>
+              )}
             </InfoCard>
+            ) : null}
 
+            {tab === 'access' ? (
             <InfoCard title={t.sectionWhoCanRecord}>
               <SelectRow
                 label={t.whoMode}
@@ -337,7 +446,9 @@ function SettingsScreen() {
                 last
               />
             </InfoCard>
+            ) : null}
 
+            {tab === 'retention' ? (
             <InfoCard title={t.sectionKeeping}>
               <NumberRow
                 label={t.keepFor}
@@ -358,8 +469,18 @@ function SettingsScreen() {
                 last
               />
             </InfoCard>
+            ) : null}
 
-            <PrimaryButton label={t.save} icon="save-outline" onPress={saveConfig} loading={saving} />
+            {/* On every tab, and correct on every tab: saveConfig writes the
+                whole record from `config`, which holds the fields of the tabs
+                that are not on screen just as much as the one that is. */}
+            <PrimaryButton
+              label={t.save}
+              icon="save-outline"
+              onPress={saveConfig}
+              loading={saving}
+              disabled={!dirty}
+            />
           </>
         ) : null}
       </ScrollView>
@@ -532,6 +653,7 @@ const styles = StyleSheet.create({
   title: { fontSize: 20, fontWeight: '700', color: colors.white, letterSpacing: -0.3 },
 
   body: { padding: spacing.xl, gap: spacing.md },
+  videoOff: { paddingBottom: spacing.lg, lineHeight: 18 },
   spinner: { marginTop: spacing.xxxl },
   empty: { alignItems: 'center', paddingVertical: spacing.xxxl, gap: spacing.sm },
   emptyIcon: { fontSize: 40 },

@@ -48,8 +48,20 @@
       [
         "expo-camera",
         {
-          "cameraPermission": "369 CleanPro uses the camera to record a short clip showing a cleaning round was completed.",
+          "cameraPermission": "369 CleanPro uses the camera to record a short clip showing a cleaning round was completed, and to photograph how each view of the showroom should look.",
           "recordAudioAndroid": false
+        }
+      ],
+      [
+        "expo-sensors",
+        {
+          "motionPermission": "369 CleanPro senses when you turn, so it can tell you which way to face for each photograph of the room."
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "369 CleanPro can use a photograph you already have as the original for a view of the showroom."
         }
       ],
       "@react-native-community/datetimepicker"

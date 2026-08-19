@@ -142,6 +142,12 @@ function RoundsScreen() {
   const heroRound = active ?? upNext;
   // Filtered out below so the round is not shown twice.
   const slots = (data?.slots ?? []).filter((s) => !active || s.id !== active.id);
+
+  // A round with the video switched off is photographs and nothing else, so the
+  // button should not promise a recording. Tested against `false` rather than
+  // falsiness, so a server too old to send the flag keeps saying "Record now"
+  // instead of quietly renaming the button on every dashboard.
+  const capturesOnly = data?.settings?.video_enabled === false;
   const greeting = useMemo(() => {
     const hour = new Date().getHours();
     if (hour < 12) return t.goodMorning;
@@ -287,6 +293,7 @@ function RoundsScreen() {
               mode={heroMode}
               round={heroRound}
               countdown={heroRound ? countdowns[heroRound.id] : undefined}
+              capturesOnly={capturesOnly}
               onRecord={openRecorder}
               denyMessage={data?.deny_message || undefined}
               done={data?.today_done}
@@ -301,6 +308,7 @@ function RoundsScreen() {
               countdown={countdowns[round.id]}
               pending={!!pending[round.id]}
               canRecord={data?.is_allowed && round.state === 'open' && !round.recording_id}
+              capturesOnly={capturesOnly}
               onRecord={openRecorder}
               onWatch={watch}
             />
