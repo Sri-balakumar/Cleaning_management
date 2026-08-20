@@ -3,7 +3,6 @@
 import { registry } from "@web/core/registry";
 import { Component, useState, onWillStart, xml } from "@odoo/owl";
 import { useService } from "@web/core/utils/hooks";
-import { user } from "@web/core/user";
 import { Dialog } from "@web/core/dialog/dialog";
 
 /**
@@ -27,46 +26,22 @@ export class HelpGuideDialog extends Component {
 
     setup() {
         this.orm = useService("orm");
-        this.action = useService("action");
-        this.state = useState({ docs: [], loaded: false, canManage: false });
+        this.state = useState({ docs: [], loaded: false });
 
         onWillStart(async () => {
             const section = this.props.section || "app";
-            const [docs, canManage] = await Promise.all([
-                this.orm.searchRead(
-                    "cleaning.manual",
-                    [["section", "=", section], ["active", "=", true]],
-                    ["name", "description", "icon"],
-                    { order: "sequence, id" }
-                ),
-                // Uploading is a manager's job, so the way in is only offered
-                // to one. The server refuses either way; this just avoids
-                // showing a button that would fail.
-                //
-                // user.hasGroup, NOT an orm.call to has_group with an empty id
-                // list. has_group calls ensure_one(), so an empty recordset
-                // raises "Expected singleton: res.users()" and takes the whole
-                // dialog down with it - which is what it did. The helper asks
-                // about the signed-in user, which is the question being asked.
-                user.hasGroup("showroom_check.group_cleaning_manager"),
-            ]);
-            this.state.docs = docs;
-            this.state.canManage = canManage;
+            this.state.docs = await this.orm.searchRead(
+                "cleaning.manual",
+                [["section", "=", section], ["active", "=", true]],
+                ["name", "description", "icon"],
+                { order: "sequence, id" }
+            );
             this.state.loaded = true;
         });
     }
 
     openGuide(id) {
         window.open("/showroom_check/help/guide/" + id, "_blank");
-    }
-
-    manage() {
-        const xmlid =
-            this.props.section === "manual"
-                ? "showroom_check.action_cleaning_manual_module"
-                : "showroom_check.action_cleaning_manual_app";
-        this.props.close?.();
-        this.action.doAction(xmlid);
     }
 }
 

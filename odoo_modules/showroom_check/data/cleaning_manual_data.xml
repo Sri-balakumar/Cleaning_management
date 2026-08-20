@@ -38,4 +38,27 @@
         <field name="pdf_filename">Showroom Check User Guide.pdf</field>
     </record>
 
+    <!--
+        The module's own manual, on the User manual shelf, shipped the same way
+        and for the same reason: it is documentation of this code, so it
+        belongs with the code rather than being uploaded once per database and
+        forgotten on the next one.
+
+        Managers only in practice, without saying so here. The Help menu that
+        reaches this shelf is a manager's menu, and the app drops section
+        'manual' before it draws anything - so `audience` is left at its
+        default rather than pretending to be the thing doing the hiding.
+    -->
+    <record id="manual_module_guide" model="cleaning.manual">
+        <field name="name">Showroom Check - Manager's Manual</field>
+        <field name="description">Set up the rounds, the originals and the roles, then read what comes back.</field>
+        <field name="icon">📗</field>
+        <field name="section">manual</field>
+        <field name="audience">user</field>
+        <field name="sequence">10</field>
+        <field name="html_static_path">showroom_check/static/src/docs/module_manual.html</field>
+        <field name="pdf_file" type="base64" file="showroom_check/static/src/docs/module_manual.pdf"/>
+        <field name="pdf_filename">Showroom Check Manual.pdf</field>
+    </record>
+
 </odoo>

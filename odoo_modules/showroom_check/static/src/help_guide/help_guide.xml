@@ -6,8 +6,7 @@
             <div class="d-flex flex-column gap-2">
                 <t t-if="state.loaded and !state.docs.length">
                     <p class="text-muted text-center p-4">
-                        Nothing here yet. Add a guide under
-                        <b>Help</b>, using <b>Manage documents</b> below.
+                        Nothing here yet.
                     </p>
                 </t>
 
@@ -28,10 +27,6 @@
             </div>
 
             <t t-set-slot="footer">
-                <button t-if="state.canManage" class="btn btn-secondary"
-                        t-on-click="() => this.manage()">
-                    Manage documents
-                </button>
                 <button class="btn btn-secondary" t-on-click="() => props.close()">Close</button>
             </t>
         </Dialog>

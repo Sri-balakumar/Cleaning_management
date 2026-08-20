@@ -1,0 +1,147 @@
+<h2>What Showroom Check does</h2>
+<p>It proves two things at once: that somebody actually visited the room, and that
+the room still looks the way it is meant to look. You photograph the room once,
+from one spot, looking each of four ways, with everything where it belongs. Every
+round after that is compared against those photographs, and anything that no
+longer matches is flagged.</p>
+
+<p style="background:#F1F5F9;border-left:3px solid #4F46E5;padding:10px 14px;margin:16px 0;">
+<strong>Before you start.</strong> The camera only works on a page whose address
+begins with <code>https</code>. That is a browser rule, not a setting in here, and
+nothing on the dashboard will work until your server is reached over https.
+Setting up needs the <strong>Manager</strong> role; day-to-day recording needs only
+<strong>User</strong>.</p>
+
+<h2>How the check works</h2>
+<p>Every office has exactly four views, fixed forever: <strong>Front, Right, Back
+and Left</strong>. You give each one a name in your own words — name it after what
+is in it rather than which way it faces, because that name is what people are shown
+when they are asked to photograph it.</p>
+<ol>
+  <li><strong>Originals</strong> — four photographs, taken once.</li>
+  <li><strong>Window opens</strong> — the round's time arrives.</li>
+  <li><strong>Capture</strong> — staff record the round.</li>
+  <li><strong>Scored</strong> — compared and flagged.</li>
+</ol>
+<p>A view with no original is invisible to the whole feature: it is not asked for,
+not stored and not scored. Start with one or two views you care about; you do not
+have to set up all four on day one.</p>
+
+<h2>Part 1 — Setting up</h2>
+<p>Done once, by a manager.</p>
+
+<h3>Give people a role</h3>
+<p>Under <strong>Settings → Users</strong>, pick the person and choose under
+Showroom Check:</p>
+<ul>
+  <li><strong>No access</strong> — cannot open Showroom Check at all.</li>
+  <li><strong>User</strong> — opens the dashboard and captures a round while its
+      window is open. Sees <em>Check</em> and <em>Help</em>, and nothing else.</li>
+  <li><strong>Manager</strong> — everything above, plus the settings, the rounds,
+      the originals, the reports, and deleting a recording.</li>
+</ul>
+<p>History and Comparisons are a manager's screens. A User still sees on the
+dashboard that a colleague's round was done, but cannot open that colleague's
+video or photographs. Only a Manager can delete a recording, which is the only way
+to record the same round twice in one day.</p>
+
+<h3>Set the daily rounds</h3>
+<p><strong>Configuration → Settings → Daily Rounds</strong>. Set the
+<strong>Office Timezone</strong> first, then add one line per visit. Three rules
+the system will not let you break:</p>
+<ul>
+  <li>A round cannot run past midnight. For 22:00–02:00, add two rounds.</li>
+  <li>Two rounds cannot overlap on the same day — the dashboard would not know
+      which one is being recorded.</li>
+  <li>A round with no day ticked is refused; it would never open.</li>
+</ul>
+<p>Every time you type is read in the <strong>Office Timezone</strong>, for
+everybody — not in each person's own profile timezone. Use the
+<strong>Instructions</strong> field for anything needed at that hour ("include the
+pantry and both washrooms"); it is shown on the dashboard card while the window is
+open, and again in the camera window.</p>
+
+<h3>Then</h3>
+<ul>
+  <li><strong>Photograph the originals</strong> — once, from the spot every round
+      will be walked from.</li>
+  <li><strong>Choose what a round records</strong> — video, photographs, or both.</li>
+  <li><strong>Say who can record.</strong></li>
+  <li><strong>Decide how long to keep recordings.</strong></li>
+  <li><strong>Turn on AI review</strong> — optional, and advisory only.</li>
+</ul>
+
+<h2>Part 2 — Everyday use</h2>
+<p>Staff open the dashboard and capture a round while its window is open; the
+server scores it straight away. Afterwards, History lists what was recorded and the
+comparison shows how it scored.</p>
+
+<h3>Reading the numbers</h3>
+<ul>
+  <li><strong>Match (arrangement)</strong> — has anything moved? The score of the
+      <em>worst</em> view, not the average, because the worst view is the entire
+      reason anybody is looking.</li>
+  <li><strong>Average Match</strong> — the mean across the views. Too smooth to
+      warn on, but the right number to watch over weeks.</li>
+  <li><strong>Similar</strong> — is this even the same view? How much of the same
+      thing is in both pictures.</li>
+  <li><strong>Matching features</strong> — press it to see the two pictures side by
+      side with a line drawn between every patch found in both.</li>
+</ul>
+<p><strong>Similar and Match answer different questions</strong> and are easy to
+confuse. A filthy room photographed from exactly the right spot is 100% similar and
+0% matched — and that pair of numbers is the whole point. Similar tells you the
+photograph is of the right thing; Match tells you whether anything in it has
+moved.</p>
+
+<h3>The verdicts</h3>
+<ul>
+  <li><strong>As expected</strong> — at or above Warn Below. Nothing to do.</li>
+  <li><strong>Worth a look</strong> — between the two thresholds. Open the round
+      and compare the pictures yourself.</li>
+  <li><strong>Something has changed</strong> — below Alert Below. Look at the worst
+      view and find out why.</li>
+  <li><strong>Could not line up</strong> — the right view, but the two pictures
+      could not be aligned; usually photographed from a very different spot.</li>
+  <li><strong>Not compared</strong> — never compared, or the comparison failed.
+      Press Compare again.</li>
+</ul>
+<p>Both thresholds are applied when the page is drawn, never stored. Change them
+and the whole history is re-graded instantly.</p>
+
+<h2>Part 3 — Keeping in order</h2>
+<p>Reading the reports, fixing a view that will not line up, watching storage, and
+getting steadier scores.</p>
+
+<h2>Quick tips</h2>
+<ul>
+  <li>The whole schedule runs on the Office Timezone, not on each person's own.</li>
+  <li>A view with no original is never asked for and never scored.</li>
+  <li>A good match is 70–80, not 100. Light changes, and people do not stand in the
+      same place twice.</li>
+  <li>Only a manager deleting a recording re-opens a round. It cannot be archived.</li>
+  <li>No sound is recorded — consider telling the people being filmed; in many
+      places that is a legal requirement.</li>
+  <li>Deleting a recording does not free disk space at once; the file goes in a
+      later clean-up.</li>
+  <li>The AI is advisory. Nothing is ever rejected automatically.</li>
+  <li>A round walked as a video is scored on frames cut out of it. Read those a
+      little more gently than an aimed photograph.</li>
+</ul>
+
+<h2>If something goes wrong</h2>
+<ul>
+  <li><strong>"Recording needs a secure (https) connection"</strong> — the page has
+      to be served over https, or the browser blocks the camera. Nothing is wrong
+      with the camera.</li>
+  <li><strong>"The camera is already being used by another program"</strong> —
+      close Teams, Zoom or any other video app completely, then Try again.</li>
+  <li><strong>"Camera access was blocked"</strong> — click the camera icon in the
+      address bar, choose Allow, then try again.</li>
+  <li><strong>The button is greyed out during the window</strong> — either the
+      round is already recorded today, or you are not on the list under Who Can
+      Record. The card says which.</li>
+</ul>
+
+<p style="color:#64748B;margin-top:24px;">The full manual, with screenshots of every
+screen, is the PDF behind the button at the top of this page.</p>
