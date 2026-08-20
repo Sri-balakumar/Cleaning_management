@@ -28,6 +28,16 @@ function classifyServerError(error) {
   const name = String(data.name ?? '');
   const serverMessage = String(data.message ?? error?.message ?? '').trim();
   const combined = `${name} ${serverMessage}`.toLowerCase();
+
+  // A model the server does not know is reported as a bare 404, worded as if the
+  // *address* were wrong ("check your spelling"). It is not: the address is fine
+  // and the module that defines the model is simply not installed on this
+  // database. The server's wording would send someone hunting the wrong problem,
+  // so it is dropped and only kept as detail for the log.
+  if (error?.code === 404 || name.endsWith('NotFound')) {
+    return new AppError('module_missing', undefined, serverMessage);
+  }
+
   let kind = 'server';
   if (combined.includes('accessdenied') || combined.includes('access denied')) {
     kind = 'invalid_credentials';
@@ -83,7 +93,15 @@ export async function rpc(baseUrl, path, params = {}, options = {}) {
   captureSessionCookie(response);
   const text = await response.text();
   if (response.status === 404) {
-    throw new AppError('incompatible', undefined, `HTTP 404 for ${path}`);
+    // Our own routes are only absent when the module is: nothing else serves
+    // them. Anything else 404ing means we are talking to the wrong sort of
+    // server -- and probeServer relies on `incompatible` to try the older
+    // endpoint before giving up, so that path must keep its kind.
+    throw new AppError(
+      path.startsWith('/showroom_check/') ? 'module_missing' : 'incompatible',
+      undefined,
+      `HTTP 404 for ${path}`,
+    );
   }
   let payload;
   try {

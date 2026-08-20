@@ -11,8 +11,10 @@ const USER_FIELDS = [
   'name',
   'login',
   'email',
+  // No 'mobile': the server dropped that field from the user record, and asking
+  // for it fails the whole read -- taking every other field on this list with
+  // it, so the profile came back empty instead of merely missing a number.
   'phone',
-  'mobile',
   'function',
   'image_128',
   'partner_id',

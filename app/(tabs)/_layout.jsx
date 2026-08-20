@@ -22,8 +22,11 @@ function TabIcon({ name, focused, color }) {
 }
 
 export default function TabsLayout() {
-  const { status } = useAuth();
+  const { status, connection } = useAuth();
   const { t } = useT();
+  // False until the dashboard answers, so a slow first load shows the smaller
+  // set rather than flashing two tabs and taking them away again.
+  const isManager = Boolean(connection?.isManager);
   const insets = useSafeAreaInsets();
   // The splash lives on `/`, so render nothing rather than flashing a tab bar.
   if (status === 'restoring') return null;
@@ -85,10 +88,21 @@ export default function TabsLayout() {
           ),
         }}
       />
+      {/* History and Compare are a manager's tabs: they are for reading back
+          what everybody recorded and how it scored. Somebody who walks the
+          rounds has the dashboard, which already says what today holds and
+          what is still to do.
+
+          `href: null` hides the tab without removing the route, so the Watch
+          button on a finished round still opens it. Hiding rather than
+          refusing: the record rules would scope these screens to their own
+          rounds anyway, so this is about what is worth offering, not about
+          what is allowed. */}
       <Tabs.Screen
         name="recordings"
         options={{
           title: t.tabRecordings,
+          href: isManager ? undefined : null,
           // Not a video camera: what is listed here is a round, which may carry
           // photographs, a clip, or both. TabIcon appends "-outline" when the
           // tab is idle, so the name has to be one with both variants.
@@ -101,6 +115,7 @@ export default function TabsLayout() {
         name="comparisons"
         options={{
           title: t.tabComparisons,
+          href: isManager ? undefined : null,
           tabBarIcon: ({ color, focused }) => (
             <TabIcon name="images" focused={focused} color={color} />
           ),

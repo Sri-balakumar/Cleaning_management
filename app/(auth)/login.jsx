@@ -160,7 +160,11 @@ export default function LoginScreen() {
       router.replace('/rounds');
     } catch (error) {
       const err = AppError.from(error);
-      if (err.kind === 'invalid_credentials') setCredentialError(translateError(t, err));
+      // The password was right and the database was wrong: say which one, since
+      // it is the field directly above and the one thing to change.
+      if (err.kind === 'module_missing') {
+        setFormError(t.moduleMissingOnDatabase.replace('{db}', db.trim()));
+      } else if (err.kind === 'invalid_credentials') setCredentialError(translateError(t, err));
       else setFormError(translateError(t, err));
     } finally {
       setSubmitting(false);

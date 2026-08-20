@@ -7,6 +7,7 @@ import React, {
   useRef,
   useState,
 } from 'react';
+import { getDashboardState } from '../api/cleaning';
 import { AppError } from '../api/errors';
 import { getSessionCookie, setSessionCookie } from '../api/rpcClient';
 import { authenticate, destroySession, fetchUserRecord, getSessionInfo } from '../api/backend';
@@ -33,7 +34,6 @@ function buildUser(session, record) {
     login: text(record?.login) ?? text(session.username) ?? '',
     email: text(record?.email),
     phone: text(record?.phone),
-    mobile: text(record?.mobile),
     jobTitle: text(record?.function),
     companyName: relationName(record?.company_id),
     partnerName: relationName(record?.partner_id) ?? text(session.partner_display_name),
@@ -44,6 +44,35 @@ function buildUser(session, record) {
     avatarBase64: text(record?.image_128),
   };
 }
+/**
+ * Refuse a database that does not carry the module.
+ *
+ * A password is accepted by whichever database was picked at the bottom of the
+ * login screen, so a perfectly correct sign-in can still land somewhere this app
+ * has nothing to talk to -- and every screen then fails one call at a time. The
+ * dashboard call is the cheapest way to ask the question, because a model the
+ * database has never heard of is exactly what comes back as `module_missing`.
+ *
+ * Only that one answer refuses. A slow link or a dropped connection must never
+ * stand between someone and their session -- the screens report those on their
+ * own -- so anything else is left to them.
+ */
+async function assertModuleInstalled(baseUrl) {
+  try {
+    // The answer is kept rather than thrown away: it carries whether this
+    // person manages the rounds, which decides what the tab bar offers. Asking
+    // a second time for one boolean already in hand would be a wasted call.
+    return await getDashboardState(baseUrl);
+  } catch (error) {
+    const err = AppError.from(error);
+    if (err.kind !== 'module_missing') return null;
+    // Dropped here rather than left for the caller: this throws before anything
+    // is saved, so the cookie is the only trace a refused sign-in would leave.
+    setSessionCookie(null);
+    throw err;
+  }
+}
+
 export function AuthProvider({ children }) {
   const [status, setStatus] = useState('restoring');
   const [user, setUser] = useState(null);
@@ -56,11 +85,18 @@ export function AuthProvider({ children }) {
     };
   }, []);
   const applySession = useCallback(async (baseUrl, session, password) => {
+    const dashboard = await assertModuleInstalled(baseUrl);
     const record = await fetchUserRecord(baseUrl, session.uid, session.user_context ?? {});
     const nextConnection = {
       baseUrl,
       db: session.db,
       serverVersion: text(session.server_version),
+      // Whether this person runs the rounds or walks them. Answered by the
+      // server, from the call above -- being an administrator and being a
+      // cleaning manager are separate things, so asking is the only way to
+      // know. False where the answer never arrived, which shows the smaller
+      // set of tabs rather than offering screens that would come back empty.
+      isManager: Boolean(dashboard?.is_manager),
     };
     await saveSession({
       baseUrl,

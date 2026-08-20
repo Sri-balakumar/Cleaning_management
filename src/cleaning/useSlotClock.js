@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { AppState } from 'react-native';
 
 import { log } from '../utils/log';
+import { noteServerTime } from './serverClock';
 
 /**
  * Keeps the round countdowns ticking without ever letting the phone decide that
@@ -86,6 +87,9 @@ export function useSlotClock(fetchState) {
     }
     if (destroyed.current) return;
     const landedAt = now();
+    // Every sync re-anchors the server's clock, so a round recorded minutes
+    // later is stamped from it rather than from the phone. See serverClock.
+    noteServerTime(data);
     log('slot-clock', `sync ok in ${Math.round(landedAt - startedAt)}ms`, {
       slots: (data.slots || []).length,
       ok: data.ok,
