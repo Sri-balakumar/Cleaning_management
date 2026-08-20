@@ -17,3 +17,5 @@ access_cleaning_reference_image_manager,cleaning.reference.image manager,model_c
 access_cleaning_recording_shot_user,cleaning.recording.shot user,model_cleaning_recording_shot,showroom_check.group_cleaning_user,1,0,1,0
 access_cleaning_recording_shot_manager,cleaning.recording.shot manager,model_cleaning_recording_shot,showroom_check.group_cleaning_manager,1,1,1,1
 access_cleaning_compare_result_manager,cleaning.compare.result manager,model_cleaning_compare_result,showroom_check.group_cleaning_manager,1,1,1,1
+access_cleaning_manual_user,cleaning.manual user,model_cleaning_manual,showroom_check.group_cleaning_user,1,0,0,0
+access_cleaning_manual_manager,cleaning.manual manager,model_cleaning_manual,showroom_check.group_cleaning_manager,1,1,1,1

@@ -20,11 +20,22 @@
               groups="showroom_check.group_cleaning_user"
               sequence="5"/>
 
+    <!-- Reading back what was recorded, and how it scored, is a manager's job -
+         the same split the app makes, where a User gets the dashboard and Help
+         and nothing else. Not a permission: the record rules already scope a
+         User to their own rounds, so this is about what is worth putting in
+         front of somebody who came here to walk a round.
+
+         The leading `-` is load-bearing. `groups=` on a menuitem LINKS rather
+         than replaces (odoo/tools/convert.py), so naming the manager group
+         alone would add it and leave User in place - which on an upgraded
+         database means the menu carries on being visible to exactly the people
+         it was meant to be hidden from, while reading correctly in the XML. -->
     <menuitem id="menu_cleaning_recordings"
               name="History"
               parent="menu_cleaning_root"
               action="showroom_check.action_cleaning_recording"
-              groups="showroom_check.group_cleaning_user"
+              groups="-showroom_check.group_cleaning_user,showroom_check.group_cleaning_manager"
               sequence="10"/>
 
     <!-- No groups= on the section headings. Each child carries its own, and
@@ -42,7 +53,7 @@
               name="Comparisons"
               parent="menu_cleaning_reporting"
               action="showroom_check.action_cleaning_comparison"
-              groups="showroom_check.group_cleaning_user"
+              groups="-showroom_check.group_cleaning_user,showroom_check.group_cleaning_manager"
               sequence="5"/>
 
     <menuitem id="menu_cleaning_missed"
@@ -75,6 +86,49 @@
               name="Rounds"
               parent="menu_cleaning_configuration"
               action="showroom_check.action_cleaning_slot"
+              groups="showroom_check.group_cleaning_manager"
+              sequence="20"/>
+
+    <!--
+        Help is its own heading, not a line under Configuration. It is what
+        somebody reaches for when they are stuck, and a heading about settings
+        is not where they would look for it.
+
+        The two children are the two shelves, named for the headings the app
+        shows: the module's own manual, and how to use the phone app.
+
+        Managers only, all three. Somebody who just walks rounds reads the
+        guides on their phone, under Profile > Help, and does not need a second
+        copy of them in here.
+
+        The group is on the HEADING as well as on the shelves, and that is the
+        point. A heading whose children are all hidden hides itself, so putting
+        it only on the shelves would work today - and would quietly come back
+        for everybody the first time somebody adds a user-visible shelf under
+        it. Saying it on the parent is what makes it stay true.
+
+        This changes what is on SCREEN and nothing else. The app never reads a
+        menu: it asks the cleaning.manual model directly, which turns on the
+        read line in ir.model.access.csv. That line stays exactly as it is, or
+        Profile > Help on the phone goes empty.
+    -->
+    <menuitem id="menu_cleaning_help"
+              name="Help"
+              parent="menu_cleaning_root"
+              groups="showroom_check.group_cleaning_manager"
+              sequence="40"/>
+
+    <menuitem id="menu_cleaning_help_module"
+              name="User Manual"
+              parent="menu_cleaning_help"
+              action="showroom_check.action_help_guide_module"
+              groups="showroom_check.group_cleaning_manager"
+              sequence="10"/>
+
+    <menuitem id="menu_cleaning_help_app"
+              name="Mobile App"
+              parent="menu_cleaning_help"
+              action="showroom_check.action_help_guide_app"
               groups="showroom_check.group_cleaning_manager"
               sequence="20"/>
 

@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+
+    <!--
+        The user guide, shipped with the module rather than uploaded per
+        database, so a fresh install already has something for a cleaner to
+        read on their first shift.
+
+        On the MOBILE APP shelf, not the User manual one. The app keeps only
+        rows whose section is not 'manual' (see help.jsx), and the User manual
+        menu is managers-only in the backend - so a guide for cleaners filed
+        there would be visible to nobody at all.
+
+        The PDF is read into pdf_file rather than pointed at with
+        pdf_static_path, and that is deliberate. The app fetches PDF bytes over
+        RPC instead of opening a URL, and get_manual() returns nothing without a
+        pdf_file - so a static path would list, render its guide, and then hand
+        back an empty document when somebody pressed the button. Loading the
+        file into the field keeps every existing read path working untouched.
+
+        The HTML is the other way round, because that path IS wired up:
+        get_guide() falls back to _read_static_file(html_static_path), which
+        keeps ninety kilobytes of embedded pictures out of this file.
+
+        Left updatable on purpose. Upgrading the module republishes the guide,
+        which is what should happen to a document that ships with the code -
+        at the cost of overwriting anything edited through the web form.
+    -->
+    <record id="manual_app_user_guide" model="cleaning.manual">
+        <field name="name">369 Showroom Check - User Guide</field>
+        <field name="description">Walk a round, capture the room, and send it in.</field>
+        <field name="icon">📘</field>
+        <field name="section">app</field>
+        <field name="audience">user</field>
+        <field name="sequence">10</field>
+        <field name="html_static_path">showroom_check/static/src/docs/user_manual.html</field>
+        <field name="pdf_file" type="base64" file="showroom_check/static/src/docs/user_manual.pdf"/>
+        <field name="pdf_filename">Showroom Check User Guide.pdf</field>
+    </record>
+
+</odoo>

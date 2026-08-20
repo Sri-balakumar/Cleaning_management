@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<templates xml:space="preserve">
+
+    <t t-name="showroom_check.HelpGuideDialog">
+        <Dialog title="props.title or 'Help'" size="'lg'">
+            <div class="d-flex flex-column gap-2">
+                <t t-if="state.loaded and !state.docs.length">
+                    <p class="text-muted text-center p-4">
+                        Nothing here yet. Add a guide under
+                        <b>Help</b>, using <b>Manage documents</b> below.
+                    </p>
+                </t>
+
+                <t t-foreach="state.docs" t-as="doc" t-key="doc.id">
+                    <div class="border rounded p-3" style="background:#F8FAFC;">
+                        <div class="mb-1" style="font-size:15px;">
+                            <span t-esc="doc.icon" class="me-1"/>
+                            <b t-esc="doc.name"/>
+                        </div>
+                        <div t-if="doc.description" class="text-muted mb-2" style="font-size:13px;"
+                             t-esc="doc.description"/>
+                        <button class="btn btn-primary btn-sm"
+                                t-on-click="() => this.openGuide(doc.id)">
+                            📖 Open guide
+                        </button>
+                    </div>
+                </t>
+            </div>
+
+            <t t-set-slot="footer">
+                <button t-if="state.canManage" class="btn btn-secondary"
+                        t-on-click="() => this.manage()">
+                    Manage documents
+                </button>
+                <button class="btn btn-secondary" t-on-click="() => props.close()">Close</button>
+            </t>
+        </Dialog>
+    </t>
+
+</templates>

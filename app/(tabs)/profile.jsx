@@ -10,7 +10,6 @@ import { ErrorBanner } from '../../src/components/ErrorBanner';
 import { GradientBackground, GradientOrbs } from '../../src/components/GradientBackground';
 import { InfoCard, InfoRow } from '../../src/components/InfoRow';
 import { PoweredBy } from '../../src/components/PoweredBy';
-import { UserManualCard } from '../../src/components/UserManualCard';
 import { LanguageToggle } from '../../src/components/LanguageToggle';
 import { PrimaryButton } from '../../src/components/PrimaryButton';
 import { translateError, useT } from '../../src/i18n/LanguageProvider';
@@ -122,9 +121,15 @@ export default function ProfileScreen() {
             />
           </InfoCard>
 
-          {/* Administrators only: the manual is about running the system,
-              not about doing a cleaning round. */}
-          {user.isAdmin ? <UserManualCard /> : null}
+          {/* Open to everyone. Which documents are on the other side of this is
+              the server's decision, made from who signed in -- repeating any of
+              it here would only give the two rules a chance to disagree. */}
+          <PrimaryButton
+            label={t.help}
+            icon="help-circle-outline"
+            onPress={() => router.push('/help')}
+            style={styles.helpBtn}
+          />
 
           <PrimaryButton
             label={t.logOut}
@@ -172,4 +177,7 @@ const styles = StyleSheet.create({
   langWrap: { marginTop: spacing.lg },
   body: { paddingHorizontal: spacing.xl, paddingTop: spacing.xxl },
   bannerWrap: { marginBottom: spacing.xl },
+  // The two buttons would otherwise sit flush against each other; the cards
+  // above carry their own bottom margin, so only this pair needs the gap.
+  helpBtn: { marginBottom: spacing.md },
 });

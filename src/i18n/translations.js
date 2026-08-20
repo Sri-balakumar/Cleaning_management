@@ -85,11 +85,19 @@ export const en = {
   checkingWithServer: 'Checking with the server.',
   closesIn: 'Closes in',
   opensIn: 'Opens in',
-  recordNow: 'Record now',
-  record: 'Record',
-  // The same two buttons when the manager has switched the video off.
+  // One label for both, because the button no longer knows which the round
+  // will be: that is chosen on the recorder screen now, and a button reading
+  // "Record now" would promise a video nobody had picked yet.
   captureNow: 'Capture now',
   capture: 'Capture',
+  // The choice itself, on the ready screen and over both cameras.
+  capturePhotos: 'Photos',
+  captureVideo: 'Video',
+  sweepEveryView: 'Turn slowly so the camera passes every view.',
+  changeCaptureMode: 'Change how you capture?',
+  changeCaptureModeBody:
+    'The photographs you have already taken will be discarded, because a round is one way or the other and half of each is not a round.',
+  discardAndChange: 'Discard and change',
   cannotRecordThisRound: 'You cannot record this round.',
   roundNotRecorded: 'This round was not recorded.',
 
@@ -122,6 +130,9 @@ export const en = {
   allowCamera: 'Allow camera',
   startRecording: 'Record now',
   stop: 'Stop',
+  continueRecording: 'Continue',
+  finishNow: 'Finish now',
+  recordingPaused: 'Paused',
   recording: 'Recording',
   upTo: 'up to',
   clipWillBeRecorded: 'clip will be recorded. No sound.',
@@ -136,6 +147,21 @@ export const en = {
   stepLabel: 'Step',
   theOriginal: 'How it should look',
   useThisPhoto: 'Use it',
+  // The clip's own wording. "Use it" agrees with a feminine noun in Arabic, so
+  // a photograph and a recording cannot share one string.
+  reviewRecording: 'Check the recording',
+  useThisClip: 'Use it',
+  retakeRecording: 'Record again',
+  // The dialog when a clip that was finished early is retaken. {done}, {total}
+  // and {left} are seconds, filled in by the caller.
+  retakeAskTitle: 'Record again?',
+  retakeAskBody: 'You recorded {done}s of the {total}s round.',
+  retakeContinue: 'Continue ({left}s left)',
+  retakeFresh: 'Start again ({total}s)',
+  playPlayback: 'Play',
+  pausePlayback: 'Pause',
+  stepBack: 'Back five seconds',
+  stepForward: 'Forward five seconds',
   photoCouldNotBeShown: 'The photograph could not be shown. Take it again.',
   photoCouldNotBeTaken: 'The camera could not take the photograph. Try again.',
   cameraNotReady: 'The camera is not ready yet.',
@@ -143,6 +169,7 @@ export const en = {
   restartCamera: 'Restart camera',
   leaveRound: 'Leave this round?',
   leaveRoundBody: 'The photographs you have taken will be discarded, and the round will start again from the first view.',
+  leaveRecordingBody: 'The clip you have recorded will be discarded, and the round will start again from the beginning.',
   leave: 'Leave',
   viewFullSize: 'View full size',
   dirFront: 'Front',
@@ -163,6 +190,10 @@ export const en = {
   sectionPhotographs: 'Photographs',
   sectionPhotoDetails: 'Photograph details',
   todayLabel: 'Today',
+  // Said instead of "Today" where the picture was cut out of the round's
+  // recording. It changes how a low score should be read: a frame off a sweep
+  // was framed however the phone happened to be pointing, not aimed.
+  fromRecordingLabel: 'From the recording',
   matchLabelShort: 'Match',
   photographCount: 'Photographs taken',
   matchLabel: 'Match (worst view)',
@@ -242,9 +273,9 @@ export const en = {
   periodNight: 'Night',
   sectionDailyRounds: 'Daily rounds',
   sectionRecording: 'Video',
-  videoEnabled: 'Also record a video',
+  videoEnabled: 'Allow a video round',
   videoEnabledHint:
-    'Turn this off to make a round the photographs and nothing else. The photographs are what the room is checked against; the video is a record of who was there, which costs far more to upload and store.',
+    'Leave this on and the cleaner chooses, round by round, between recording one sweep of the room and photographing each view. Both are checked against the originals the same way. Turn it off to make every round the photographs and nothing else - a video costs far more to upload and store.',
   videoOffNote:
     'The video is off, so a round is the photographs and nothing else. The settings that describe the video are not in use.',
   sectionWhoCanRecord: 'Who can record',
@@ -401,7 +432,21 @@ export const en = {
   weekSat: 'Sat',
   weekSun: 'Sun',
 
+  // --- Help ---------------------------------------------------------------
+  help: 'Help',
+  // The two headings on the Help screen: the module's own documentation, and
+  // how to use the app.
   userManual: 'User manual',
+  mobileApp: 'Mobile app',
+  managersOnly: 'Managers only',
+  openFullPdf: 'Open full PDF',
+  guideNotWritten: 'This guide has not been written yet.',
+  noManualUploaded: 'No manual has been uploaded yet.',
+
+  // The named version of errors.module_missing, for the one screen that knows
+  // which database was chosen. `{db}` is filled in by the caller.
+  moduleMissingOnDatabase:
+    'Showroom Check is not installed on the database "{db}". Choose another database, or ask an administrator to install it.',
 
   // --- Errors (keyed by AppError.kind) ------------------------------------
   errors: {
@@ -413,6 +458,9 @@ export const en = {
     invalid_credentials: 'Wrong username or password.',
     session_expired: 'Your session expired. Please sign in again.',
     access_error: "You don't have permission to do that.",
+    module_missing:
+      'Showroom Check is not installed on this database. Choose another database, or ask an administrator to install it.',
+    not_a_pdf: 'That document is not a PDF, so it cannot be opened here.',
     server: 'The server returned an error.',
   },
 };
@@ -493,10 +541,15 @@ export const ar = {
   checkingWithServer: 'جارٍ التحقق مع الخادم.',
   closesIn: 'تُغلق خلال',
   opensIn: 'تُفتح خلال',
-  recordNow: 'سجّل الآن',
-  record: 'تسجيل',
   captureNow: 'صوّر الآن',
   capture: 'تصوير',
+  capturePhotos: 'صور',
+  captureVideo: 'فيديو',
+  sweepEveryView: 'استدر ببطء حتى تمرّ الكاميرا على كل زاوية.',
+  changeCaptureMode: 'تغيير طريقة التصوير؟',
+  changeCaptureModeBody:
+    'سيتم حذف الصور التي التقطتها حتى الآن، لأن الجولة تكون بطريقة واحدة فقط ولا تصح نصفين.',
+  discardAndChange: 'احذف وغيّر',
   cannotRecordThisRound: 'لا يمكنك تسجيل هذه الجولة.',
   roundNotRecorded: 'لم يتم تسجيل هذه الجولة.',
 
@@ -527,6 +580,9 @@ export const ar = {
   allowCamera: 'السماح بالكاميرا',
   startRecording: 'سجّل الآن',
   stop: 'إيقاف',
+  continueRecording: 'متابعة',
+  finishNow: 'إنهاء الآن',
+  recordingPaused: 'موقوف مؤقتًا',
   recording: 'جارٍ التسجيل',
   upTo: 'حتى',
   clipWillBeRecorded: 'سيتم تسجيل مقطع. بدون صوت.',
@@ -541,6 +597,17 @@ export const ar = {
   stepLabel: 'الخطوة',
   theOriginal: 'كيف ينبغي أن يبدو',
   useThisPhoto: 'استخدمها',
+  reviewRecording: 'راجع التسجيل',
+  useThisClip: 'استخدمه',
+  retakeRecording: 'إعادة التسجيل',
+  retakeAskTitle: 'إعادة التسجيل؟',
+  retakeAskBody: 'سجّلت {done} ثانية من أصل {total}.',
+  retakeContinue: 'متابعة (بقي {left} ثانية)',
+  retakeFresh: 'ابدأ من جديد ({total} ثانية)',
+  playPlayback: 'تشغيل',
+  pausePlayback: 'إيقاف مؤقت',
+  stepBack: 'رجوع خمس ثوانٍ',
+  stepForward: 'تقدّم خمس ثوانٍ',
   photoCouldNotBeShown: 'تعذّر عرض الصورة. التقطها مرة أخرى.',
   photoCouldNotBeTaken: 'تعذّر على الكاميرا التقاط الصورة. حاول مرة أخرى.',
   cameraNotReady: 'الكاميرا ليست جاهزة بعد.',
@@ -548,6 +615,7 @@ export const ar = {
   restartCamera: 'إعادة تشغيل الكاميرا',
   leaveRound: 'مغادرة هذه الجولة؟',
   leaveRoundBody: 'سيتم تجاهل الصور التي التقطتها، وستبدأ الجولة من المشهد الأول مرة أخرى.',
+  leaveRecordingBody: 'سيتم تجاهل المقطع الذي سجّلته، وستبدأ الجولة من جديد.',
   leave: 'مغادرة',
   viewFullSize: 'عرض بالحجم الكامل',
   dirFront: 'الأمام',
@@ -568,6 +636,7 @@ export const ar = {
   sectionPhotographs: 'الصور',
   sectionPhotoDetails: 'تفاصيل الصور',
   todayLabel: 'اليوم',
+  fromRecordingLabel: 'من التسجيل',
   matchLabelShort: 'التطابق',
   photographCount: 'عدد الصور',
   matchLabel: 'التطابق (أسوأ مشهد)',
@@ -647,9 +716,9 @@ export const ar = {
   periodNight: 'ليلًا',
   sectionDailyRounds: 'الجولات اليومية',
   sectionRecording: 'الفيديو',
-  videoEnabled: 'تسجيل فيديو أيضًا',
+  videoEnabled: 'السماح بجولة فيديو',
   videoEnabledHint:
-    'أوقف هذا الخيار لتصبح الجولة صورًا فقط. الصور هي ما تُفحص الغرفة بناءً عليه، أما الفيديو فهو سجل لمن كان هناك، وتكلفة رفعه وتخزينه أعلى بكثير.',
+    'اترك هذا الخيار مفعّلًا ليختار عامل النظافة في كل جولة بين تصوير مقطع واحد يمسح الغرفة أو تصوير كل زاوية على حدة. الطريقتان تُفحصان مقابل الصور الأصلية بالطريقة نفسها. أوقفه لتصبح كل جولة صورًا فقط - فتكلفة رفع الفيديو وتخزينه أعلى بكثير.',
   videoOffNote:
     'الفيديو متوقف، لذا تتكوّن الجولة من الصور فقط. الإعدادات التي تصف الفيديو غير مستخدمة.',
   sectionWhoCanRecord: 'من يمكنه التسجيل',
@@ -806,7 +875,17 @@ export const ar = {
   weekSat: 'السبت',
   weekSun: 'الأحد',
 
+  // --- Help ---------------------------------------------------------------
+  help: 'المساعدة',
   userManual: 'دليل المستخدم',
+  mobileApp: 'تطبيق الجوال',
+  managersOnly: 'للمديرين فقط',
+  openFullPdf: 'افتح الملف كاملاً',
+  guideNotWritten: 'لم يُكتب هذا الدليل بعد.',
+  noManualUploaded: 'لم يتم رفع أي دليل بعد.',
+
+  moduleMissingOnDatabase:
+    'تطبيق فحص صالة العرض غير مثبّت على قاعدة البيانات "{db}". اختر قاعدة بيانات أخرى، أو اطلب من المسؤول تثبيته.',
 
   // --- Errors (keyed by AppError.kind) ------------------------------------
   errors: {
@@ -817,6 +896,9 @@ export const ar = {
     invalid_credentials: 'اسم المستخدم أو كلمة المرور غير صحيحة.',
     session_expired: 'انتهت جلستك. يرجى تسجيل الدخول مرة أخرى.',
     access_error: 'ليس لديك إذن للقيام بذلك.',
+    module_missing:
+      'تطبيق فحص صالة العرض غير مثبّت على قاعدة البيانات هذه. اختر قاعدة بيانات أخرى، أو اطلب من المسؤول تثبيته.',
+    not_a_pdf: 'هذا الملف ليس بصيغة PDF، لذا لا يمكن فتحه هنا.',
     server: 'أرجع الخادم خطأً.',
   },
 };

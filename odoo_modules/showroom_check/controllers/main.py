@@ -1,6 +1,8 @@
 import logging
 import re
 
+from markupsafe import escape
+
 from odoo import fields, http
 from odoo.exceptions import AccessError, UserError, ValidationError
 from odoo.http import request
@@ -111,7 +113,7 @@ class CleaningManagementController(http.Controller):
     def upload(self, slot_id=None, started_at=None, ended_at=None,
                duration_seconds=None, width=None, height=None, mimetype=None,
                file_format=None, truncated=None, latitude=None, longitude=None,
-               capture_mode=None, video=None, **kwargs):
+               capture_mode=None, capture_kind=None, video=None, **kwargs):
         """Receive one recorded clip.
 
         This is a plain form upload rather than a JSON call on purpose. A large
@@ -138,6 +140,16 @@ class CleaningManagementController(http.Controller):
             if refusal:
                 return self._json_error('not_allowed', refusal, status=403)
 
+            # How this round was captured, where the client said so.
+            #
+            # Absent on every upload the web recorder sends and on every older
+            # app, and that is a third answer rather than a default: those
+            # clients record whatever the settings say, so the rules below stay
+            # exactly as they were for them. Only a client that explicitly asks
+            # for one of the two modes gets the new behaviour.
+            kind = capture_kind if capture_kind in ('video', 'photographs') else None
+            wants_video = config.video_enabled if kind is None else kind == 'video'
+
             required = config._required_directions()
             # "Nothing to record" means no clip AND no view worth photographing,
             # which is the ASKABLE list - not the required one.
@@ -147,7 +159,7 @@ class CleaningManagementController(http.Controller):
             # originals it had set up: required is empty whenever the setting is
             # off, so the server told somebody who had just walked the room and
             # photographed it that there was nothing to record.
-            if not config.video_enabled and not config._askable_directions():
+            if not wants_video and not config._askable_directions():
                 return self._json_error('not_configured', request.env._(
                     "This round would record nothing at all: the video is "
                     "switched off and no original photographs have been set "
@@ -161,7 +173,7 @@ class CleaningManagementController(http.Controller):
             if has_video:
                 blob = video.read() or b''
 
-            if config.video_enabled:
+            if wants_video:
                 if not has_video:
                     return self._json_error('no_file', request.env._(
                         "No recording was received. Please try again."))
@@ -218,7 +230,13 @@ class CleaningManagementController(http.Controller):
                     continue
                 photos[key] = (data, part.mimetype or 'image/jpeg')
 
-            missing = [key for key in required if key not in photos]
+            # A video round photographs nothing, and is not missing anything
+            # for it: the views are read back out of the recording below, and
+            # any the sweep never showed is recorded as unseen with a reason on
+            # it. Holding it to the photograph rule would refuse the one mode
+            # that exists so nobody has to take them.
+            missing = [] if kind == 'video' else [
+                key for key in required if key not in photos]
             if missing:
                 return self._json_error('missing_photos', request.env._(
                     "These views were not photographed, or the pictures did "
@@ -268,6 +286,10 @@ class CleaningManagementController(http.Controller):
                     capture_mode
                     if capture_mode in ('browser', 'mobile', 'manual')
                     else 'browser'),
+                # Left empty where the client did not say, which is honest: a
+                # round uploaded before there was a choice was not "a video
+                # round", it was the only kind of round there was.
+                'capture_kind': kind or False,
                 'ip_address': request.httprequest.remote_addr,
                 'user_agent': request.httprequest.user_agent.string[:512]
                               if request.httprequest.user_agent else False,
@@ -281,10 +303,14 @@ class CleaningManagementController(http.Controller):
                 recording._attach_video(blob, filename, resolved_mimetype)
 
             # Stills captured in the browser while recording. They are what the
-            # AI review looks at - neither Gemini nor a local Llama reads video,
-            # and pulling frames out server-side would mean installing ffmpeg.
-            # Capturing them at record time also picks known moments (start,
-            # middle, end) rather than wherever a decoder happens to land.
+            # AI review looks at - neither Gemini nor a local Llama reads video.
+            # Capturing them at record time picks known moments (start, middle,
+            # end) rather than wherever a decoder happens to land.
+            #
+            # A video round does not send these: it has the whole recording, so
+            # _extract_shots_from_video below cuts its own stills out of it and
+            # stores them the same way. Hence the check before storing - the
+            # extraction skips it entirely if stills are already here.
             frames = []
             for key in sorted((k for k in request.httprequest.files
                                if k.startswith('frame_')), key=_frame_sort_key):
@@ -294,6 +320,16 @@ class CleaningManagementController(http.Controller):
                     frames.append((data, upload.mimetype or 'image/jpeg'))
             if frames:
                 recording._store_frames(frames)
+
+            # A video round: read its views back out of the recording it just
+            # sent. Inline, because somebody who has finished a round should be
+            # told what it scored rather than come back to it later, and because
+            # the response below already carries the verdict.
+            #
+            # After the clip is attached, never instead of it. The recording is
+            # what was uploaded and what is kept; these are a reading of it.
+            if kind == 'video' and has_video:
+                recording._extract_shots_from_video()
 
             # The photographs last: they are scored as they are stored, and a
             # score is worth nothing if the round it belongs to was refused.
@@ -441,3 +477,56 @@ class CleaningManagementController(http.Controller):
             filename=shot.image_filename,
             filename_field='image_filename',
         ).get_response(as_attachment=False, immutable=True)
+
+    @http.route('/showroom_check/help/guide/<int:manual_id>', type='http',
+                auth='user', methods=['GET'])
+    def help_guide(self, manual_id, **kwargs):
+        """A guide, as a page anyone can read, with the PDF one click away.
+
+        The model returns the body only; the shell is built here. The app
+        builds its own for the same body, because a phone has no session
+        cookie to open a URL with -- which is why this is not the app's route.
+
+        The audience is checked by get_guide rather than repeated here: a URL
+        typed by hand deserves the same answer as the button that normally
+        opens it.
+        """
+        manual = request.env['cleaning.manual']
+        guide = manual.get_guide(manual_id)
+        if not guide:
+            return request.not_found()
+
+        title = escape(guide['name'])
+        body = guide['html'] or (
+            '<p style="color:#64748B;">This guide has not been written yet.</p>')
+
+        button = ''
+        if guide['has_pdf']:
+            pdf_url = manual.sudo().browse(manual_id).pdf_url or ''
+            button = (
+                '<a href="%s" target="_blank" rel="noopener" '
+                'style="background:#fff;color:#4F46E5;border-radius:8px;padding:8px 16px;'
+                'font-weight:600;text-decoration:none;white-space:nowrap;">'
+                '&#128196; Open in PDF doc</a>' % escape(pdf_url)
+            )
+
+        html = (
+            '<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"/>'
+            '<meta name="viewport" content="width=device-width, initial-scale=1.0"/>'
+            '<title>' + title + '</title></head>'
+            '<body style="margin:0;font-family:Segoe UI,system-ui,Arial,sans-serif;'
+            'color:#0F172A;background:#F1F5F9;">'
+            '<div style="position:sticky;top:0;z-index:5;background:#4F46E5;color:#fff;'
+            'padding:12px 20px;display:flex;align-items:center;justify-content:space-between;'
+            'gap:16px;">'
+            '<span style="font-weight:700;font-size:16px;">' + title + '</span>'
+            + button +
+            '</div>'
+            '<div style="max-width:900px;margin:0 auto;padding:24px;background:#fff;'
+            'min-height:calc(100vh - 54px);line-height:1.6;">' + body + '</div>'
+            '</body></html>'
+        )
+        return request.make_response(html, headers=[
+            ('Content-Type', 'text/html; charset=utf-8'),
+            ('Cache-Control', 'no-store'),
+        ])
