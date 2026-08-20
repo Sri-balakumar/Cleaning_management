@@ -3,6 +3,7 @@
 import { registry } from "@web/core/registry";
 import { Component, useState, onWillStart, xml } from "@odoo/owl";
 import { useService } from "@web/core/utils/hooks";
+import { user } from "@web/core/user";
 import { Dialog } from "@web/core/dialog/dialog";
 
 /**
@@ -41,10 +42,13 @@ export class HelpGuideDialog extends Component {
                 // Uploading is a manager's job, so the way in is only offered
                 // to one. The server refuses either way; this just avoids
                 // showing a button that would fail.
-                this.orm.call("res.users", "has_group", [
-                    [],
-                    "showroom_check.group_cleaning_manager",
-                ]),
+                //
+                // user.hasGroup, NOT an orm.call to has_group with an empty id
+                // list. has_group calls ensure_one(), so an empty recordset
+                // raises "Expected singleton: res.users()" and takes the whole
+                // dialog down with it - which is what it did. The helper asks
+                // about the signed-in user, which is the question being asked.
+                user.hasGroup("showroom_check.group_cleaning_manager"),
             ]);
             this.state.docs = docs;
             this.state.canManage = canManage;
