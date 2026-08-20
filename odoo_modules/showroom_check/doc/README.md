@@ -73,23 +73,34 @@ server's address ever changes. Use it to try the module out, not to run it.
 
 1. **Install the module.** Apps → search for *Showroom Check* → Install.
 
-   **Optional, and worth it:** install OpenCV into the same Python the
-   server runs on, before or after the module —
+   Installing also installs **OpenCV** (`opencv-python-headless`) into the
+   same Python the server runs on, and so does upgrading. Nothing is needed
+   from you if that succeeds.
+
+   It matters more than it sounds. Without OpenCV a round is compared against
+   its original by brightness over a fixed grid, which only works where the
+   two were photographed from much the same spot. With it, the server also
+   matches features — so it can tell whether a round photographed *the same
+   view at all*, across a different phone, distance and angle, and say so when
+   it did not. **Reading a round out of its recording needs it outright**: the
+   video option is not offered without it.
+
+   The install can be refused, usually because the account the server runs as
+   cannot write to its own Python folder — normal for a service under
+   *Program Files*. Nothing breaks: the module installs and runs, and
+   *Configuration → Settings → Video* shows a warning with an **Install it
+   now** button to try again once that account has been given write access.
+   The server log carries the exact reason it failed.
+
+   To do it by hand instead, run this as that account and restart the service:
 
    ```
    "C:\Program Files\Odoo 19.0.20260119\python\python.exe" -m pip install opencv-python-headless
    ```
 
-   Without it, a round is compared against its original by brightness over
-   a fixed grid, which only works where the two were photographed from
-   much the same spot. With it, the server also matches features, so it can
-   tell whether a round photographed *the same view at all* — across a
-   different phone, a different distance and a different angle — and says
-   so when it did not.
-
-   The module installs and runs either way; nothing fails without it. Redo
-   this after an Odoo upgrade, which replaces the interpreter, and re-save
-   one original afterwards so the descriptors are rebuilt.
+   After an Odoo upgrade replaces the interpreter, upgrade the module to put
+   OpenCV back, and re-save one original afterwards so the descriptors are
+   rebuilt.
 
 2. **Give people access.** Settings → Users → pick a person → under
    **Showroom Check** choose:

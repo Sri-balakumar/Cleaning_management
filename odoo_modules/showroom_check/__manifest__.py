@@ -1,6 +1,6 @@
 {
     'name': 'Showroom Check',
-    'version': '19.0.3.5.0',
+    'version': '19.0.3.8.0',
     'category': 'Operations',
     'summary': 'Scheduled photo check that a showroom matches its agreed layout',
     'description': """
@@ -56,12 +56,16 @@ detects this and explains it. See ``doc/README.md`` for the reverse-proxy setup.
         'views/cleaning_compare_result_views.xml',
         'views/cleaning_slot_missed_views.xml',
         'views/cleaning_ai_views.xml',
+        'views/cleaning_manual_views.xml',
         # Deliberately NO res.config.settings extension. Inheriting the shared
         # settings form makes Odoo revalidate every other module's additions to
         # it, so one unrelated stale view anywhere in the database blocks this
         # module from installing. The settings have their own menu under
         # Cleaning > Configuration, which is where people look anyway.
         'views/menu.xml',
+        # Last: the record points at files under static/ and needs the model
+        # loaded, so it can only be read once everything above has been.
+        'data/cleaning_manual_data.xml',
     ],
     'assets': {
         # Both .js and .xml go here - Odoo 19 has no separate assets_qweb

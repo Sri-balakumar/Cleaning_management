@@ -4,7 +4,9 @@ from datetime import datetime, time
 import pytz
 
 from odoo import api, fields, models
-from odoo.exceptions import ValidationError
+from odoo.exceptions import AccessError, ValidationError
+
+from . import cleaning_image_compare as compare
 
 _logger = logging.getLogger(__name__)
 
@@ -262,6 +264,15 @@ class CleaningConfig(models.Model):
         help="How many of the four views have an original photograph. Views "
              "without one are not asked for and not scored.")
 
+    opencv_available = fields.Boolean(
+        string='Feature Matching Installed',
+        compute='_compute_opencv_available',
+        help="Whether OpenCV is installed on this server.\n\n"
+             "Without it photographs are still compared, but on overall "
+             "brightness alone - the module cannot tell whether two pictures "
+             "are of the same thing, and a round cannot be read out of its "
+             "recording at all.")
+
     require_photos = fields.Boolean(
         string='Require the photographs', default=False,
         help="When this is on, a round is refused unless it carries a "
@@ -424,6 +435,67 @@ class CleaningConfig(models.Model):
             config.estimated_size_mb = byte_estimate / (1024.0 * 1024.0)
 
     @api.depends('reference_image_ids', 'reference_image_ids.image')
+    def action_install_opencv(self):
+        """Try the OpenCV install again, from the settings form.
+
+        The automatic attempt at install time is refused on any server whose
+        service account cannot write to its own site-packages, which is most
+        Windows installs sitting under Program Files. This is the same attempt
+        made deliberately - by somebody who can grant that permission first and
+        then press a button, rather than having to uninstall and reinstall the
+        module to get one more try.
+
+        Restricted to Settings rather than to a Showroom Check Manager on
+        purpose: this installs software onto the server. Deciding what may be
+        installed there is a job for whoever administers the server, and a
+        cleaning manager is not necessarily that person.
+        """
+        self.ensure_one()
+        if not self.env.user.has_group('base.group_system'):
+            raise AccessError(self.env._(
+                "Only a system administrator can install software onto this "
+                "server."))
+
+        from odoo.addons.showroom_check import _ensure_opencv
+        installed = _ensure_opencv()
+        # Computed and unstored, and the answer it depends on just changed
+        # underneath it inside this same request.
+        self.invalidate_recordset(['opencv_available'])
+
+        if installed:
+            message = self.env._(
+                "OpenCV is installed. Recordings can now be read, and "
+                "photographs are compared across cameras and distances.\n\n"
+                "Restart the server when convenient so every worker process "
+                "picks it up.")
+        else:
+            message = self.env._(
+                "OpenCV could not be installed automatically.\n\n"
+                "The usual reason is that the account this server runs as "
+                "cannot write to its own Python folder. The server log has the "
+                "exact command to run by hand, and what went wrong.")
+        return {
+            'type': 'ir.actions.client',
+            'tag': 'display_notification',
+            'params': {
+                'type': 'success' if installed else 'warning',
+                'message': message,
+                'sticky': not installed,
+            },
+        }
+
+    def _compute_opencv_available(self):
+        """One answer for the whole server, not one per company.
+
+        Asked of the comparison engine rather than imported again here, so
+        there is exactly one place that decides whether OpenCV is present and
+        the settings form cannot end up disagreeing with the code that does
+        the comparing.
+        """
+        available = compare.cv2 is not None
+        for config in self:
+            config.opencv_available = available
+
     def _compute_reference_count(self):
         for config in self:
             config.reference_count = len(
@@ -725,6 +797,13 @@ class CleaningConfig(models.Model):
             # talking to an older server that never sent it still records a
             # video, exactly as it always did.
             'video_enabled': self.video_enabled,
+            # Whether a round can be READ OUT of a recording, which is a
+            # different question from whether one may be made. Matching a frame
+            # to a view needs feature matching, so without OpenCV a video round
+            # would upload happily and then score nothing - and the client has
+            # to know that before it offers the choice, not after.
+            'video_readable': self.video_enabled and self.opencv_available,
+            'opencv_available': self.opencv_available,
             'require_photos': self.require_photos,
             'min_photo_bytes': MIN_PHOTO_BYTES,
             'directions': self._direction_payload(),

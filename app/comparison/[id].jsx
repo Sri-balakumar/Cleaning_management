@@ -116,7 +116,7 @@ function ComparisonScreen() {
 
             {shots.length ? (
               <InfoCard title={t.sectionPhotographs}>
-                <RoundPhotos baseUrl={connection.baseUrl} shots={shots} />
+                <RoundPhotos baseUrl={connection.baseUrl} recordingId={id} shots={shots} />
               </InfoCard>
             ) : loading ? null : (
               <View style={styles.empty}>

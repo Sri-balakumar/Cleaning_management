@@ -30,6 +30,7 @@
                 <field name="ai_score" optional="hide" widget="progressbar"/>
                 <field name="truncated" optional="hide"/>
                 <field name="capture_mode" optional="hide"/>
+                <field name="capture_kind" optional="hide"/>
                 <field name="company_id" groups="base.group_multi_company" optional="hide"/>
             </list>
         </field>
@@ -56,6 +57,17 @@
                             string="Compare again" icon="fa-refresh"
                             groups="showroom_check.group_cleaning_manager"
                             invisible="shot_count == 0"/>
+                    <!-- Reads the views back out of the clip. Offered on any
+                         round that HAS a clip, not only on one recorded as a
+                         video round: the commonest reason to want it is a round
+                         somebody recorded before the views were set up, and
+                         refusing it there would leave the recording sitting
+                         unread with no way to ask again. -->
+                    <button name="action_extract_from_video" type="object"
+                            string="Read views from recording" icon="fa-film"
+                            groups="showroom_check.group_cleaning_manager"
+                            invisible="not video_file"
+                            confirm="Read this round's views out of its recording? Any view found in it replaces the picture currently stored for that view."/>
                     <field name="ai_status" widget="statusbar"
                            statusbar_visible="not_run,done"/>
                 </header>
@@ -322,6 +334,7 @@
                             <group>
                                 <group>
                                     <field name="capture_mode"/>
+                                    <field name="capture_kind"/>
                                     <field name="uploaded_at"/>
                                     <field name="ip_address"/>
                                     <field name="browser"/>

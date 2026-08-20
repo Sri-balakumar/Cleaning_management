@@ -117,6 +117,10 @@ const SHOT_FIELDS = [
   // advisories, and a Match figure shown where none was measured.
   'similarity', 'match_count', 'registered', 'same_view',
   'view_mismatch', 'poorly_framed',
+  // Whether this picture was cut out of the round's recording rather than
+  // photographed. It changes how a low score should be read, so the card says
+  // which it was rather than leaving somebody to guess.
+  'from_video',
   'ai_verdict', 'ai_changes',
 ];
 
@@ -135,16 +139,51 @@ export const fetchRecordingShots = (baseUrl, recordingId) =>
     kwargs: { order: 'sequence, id' },
   });
 
-/** One photograph as base64, fetched when there is somewhere to show it. */
-export async function fetchShotImage(baseUrl, shotId) {
-  const rows = await rpc(baseUrl, '/web/dataset/call_kw', {
-    model: 'cleaning.recording.shot',
-    method: 'read',
-    args: [[Number(shotId)], ['image']],
-    kwargs: {},
-  });
-  const image = Array.isArray(rows) && rows.length ? rows[0].image : false;
-  return image || null;
+/**
+ * Every picture of one round, and every original they were measured against,
+ * in two calls rather than two per card.
+ *
+ * Four views used to mean eight of these going out at once, each carrying a
+ * full-size picture as base64, against a server with a handful of workers.
+ * They queued, and the cards at the back of the queue looked broken rather
+ * than slow -- which is exactly what somebody opening a round straight after
+ * recording it saw.
+ *
+ * Returns `{ shots: {id: base64}, originals: {id: base64} }`, with a missing
+ * picture simply absent rather than null, so a caller can tell "not here" from
+ * "not asked for".
+ *
+ * No new server method: `search_read` is generic, and the record rules that
+ * scope a cleaner to their own rounds apply to it exactly as they did to the
+ * per-card reads this replaces.
+ */
+export async function fetchRoundImages(baseUrl, recordingId, referenceIds = []) {
+  const wanted = [...new Set(referenceIds.filter(Boolean).map(Number))];
+  const [shotRows, referenceRows] = await Promise.all([
+    rpc(baseUrl, '/web/dataset/call_kw', {
+      model: 'cleaning.recording.shot',
+      method: 'search_read',
+      args: [[['recording_id', '=', Number(recordingId)]], ['id', 'image']],
+      kwargs: {},
+    }),
+    wanted.length
+      ? rpc(baseUrl, '/web/dataset/call_kw', {
+          model: 'cleaning.reference.image',
+          method: 'read',
+          args: [wanted, ['image']],
+          kwargs: {},
+        })
+      : Promise.resolve([]),
+  ]);
+
+  const collect = (rows) => {
+    const byId = {};
+    for (const row of rows || []) {
+      if (row?.image) byId[row.id] = row.image;
+    }
+    return byId;
+  };
+  return { shots: collect(shotRows), originals: collect(referenceRows) };
 }
 
 /**
@@ -291,6 +330,7 @@ export function uploadRecording(baseUrl, payload, onProgress) {
     width,
     height,
     truncated,
+    captureKind,
     frames = [],
     photos = [],
   } = payload;
@@ -307,6 +347,10 @@ export function uploadRecording(baseUrl, payload, onProgress) {
   form.append('file_format', fileFormat || '');
   form.append('truncated', truncated ? '1' : '0');
   form.append('capture_mode', 'mobile');
+  // Only where the person was actually offered the choice. An older server
+  // ignores it, and a current one treats its absence as "captured under the
+  // old rules" - which is exactly what a round is when nobody was asked.
+  if (captureKind) form.append('capture_kind', captureKind);
   if (videoUri) {
     form.append('video', {
       uri: videoUri,
@@ -352,6 +396,13 @@ export function uploadRecording(baseUrl, payload, onProgress) {
     }
 
     request.onload = () => {
+      // Nothing else serves this route, so a 404 means the module is gone from
+      // the database rather than that the reply was unreadable -- which is what
+      // the parse below would otherwise conclude from the error page.
+      if (request.status === 404) {
+        reject(new AppError('module_missing', undefined, 'HTTP 404 for /showroom_check/upload'));
+        return;
+      }
       let body;
       try {
         body = JSON.parse(request.responseText);

@@ -5,9 +5,10 @@ from dateutil.relativedelta import relativedelta
 from odoo import api, fields, models
 from odoo.exceptions import AccessError, UserError, ValidationError
 
+from . import cleaning_image_compare as compare
 from .cleaning_config import (
     DIRECTION_SEQUENCE, MATCH_LEVELS, MIN_PHOTO_BYTES, PHOTO_ROUND_SECONDS,
-    format_float_time,
+    VIEW_MISMATCH_DISTANCE, format_float_time,
 )
 
 _logger = logging.getLogger(__name__)
@@ -106,6 +107,14 @@ class CleaningRecording(models.Model):
         [('browser', 'Browser Webcam'), ('mobile', 'Mobile App'),
          ('manual', 'Manual Upload')],
         string='Mode', readonly=True, default='browser')
+    capture_kind = fields.Selection(
+        [('video', 'Video'), ('photographs', 'Photographs')],
+        string='Recorded As', readonly=True,
+        help="Which way this round was captured. A video round is scored on "
+             "stills read back out of the recording; a photographs round is "
+             "scored on the pictures somebody took of each view.\n\n"
+             "Empty on every round recorded before there was a choice, which "
+             "is not the same as either answer and must not be shown as one.")
     ip_address = fields.Char(string='IP Address', readonly=True)
     browser = fields.Char(string='Browser', readonly=True)
     user_agent = fields.Char(string='User Agent', readonly=True)
@@ -392,7 +401,17 @@ class CleaningRecording(models.Model):
         # photograph was refused as back-dated the moment somebody took more than
         # the grace period to walk the room, which is most of them.
         now = fields.Datetime.now()
-        round_seconds = (config.duration_seconds if config.video_enabled
+        # Timed by what was actually done, not by what the settings permit.
+        # Where somebody CHOSE to photograph a round on a site that also allows
+        # video, the round took as long as walking the room takes, and timing
+        # it by the clip's duration instead refused it as back-dated the moment
+        # the walk ran over - which is the same failure the photographs-only
+        # case above was fixed for. An upload that says nothing about how it
+        # was captured falls back to the setting, exactly as before.
+        records_video = (config.video_enabled
+                         if not vals.get('capture_kind')
+                         else vals.get('capture_kind') == 'video')
+        round_seconds = (config.duration_seconds if records_video
                          else PHOTO_ROUND_SECONDS)
         oldest_allowed = now - relativedelta(
             seconds=round_seconds + max(0, config.upload_grace_seconds))
@@ -508,6 +527,207 @@ class CleaningRecording(models.Model):
         self.invalidate_recordset(['shot_ids'])
         self.modified(['shot_ids'])
         return stored
+
+    # ------------------------------------------------------------------
+    # Reading the views out of the recording
+    # ------------------------------------------------------------------
+    def _video_raw(self):
+        """The stored clip's bytes, without going through base64.
+
+        The same trick `_raw_image` uses on a photograph, and for a stronger
+        reason: the Binary field hands back base64, which for a ninety megabyte
+        clip means building a hundred and twenty megabyte string in order to
+        throw it away a moment later.
+        """
+        self.ensure_one()
+        attachment = self.env['ir.attachment'].sudo().search([
+            ('res_model', '=', self._name),
+            ('res_field', '=', 'video_file'),
+            ('res_id', '=', self.id),
+        ], limit=1)
+        return attachment.raw if attachment else None
+
+    def _frame_shows_view(self, result):
+        """Is this frame of the view it was compared against at all?
+
+        Feature matching answers it properly where OpenCV could run, and its
+        answer wins: it compares what is IN the two pictures, where the hash
+        only compares their overall shape. Without it the hash is all there is
+        - the same fallback `_compute_view_mismatch` already makes about a
+        photograph.
+
+        Deliberately stricter than the photograph path, which records a
+        mismatched picture and flags it. A photograph of the wrong wall is
+        somebody's mistake and worth showing them; a frame of the wrong wall is
+        just a frame, and there are twenty-three others to choose from.
+        """
+        if not result or result.get('score') is None:
+            return False
+        if result.get('same_view') is not None:
+            return bool(result['same_view'])
+        distance = result.get('hash_distance')
+        return distance is not None and distance < VIEW_MISMATCH_DISTANCE
+
+    def _record_unseen_views(self, references, reason):
+        """Record that a view has no picture from this round, and why.
+
+        A row rather than a gap. The Comparisons list is read by counting
+        cards, so a view the sweep missed simply not being there reads as a
+        round nobody finished - where an unscored row carrying a sentence reads
+        as what it actually is. The same choice `match_error` already makes for
+        a photograph that could not be compared.
+
+        Never replaces a row that is already there: a view somebody
+        photographed by hand is not missing, whatever the sweep did.
+        """
+        self.ensure_one()
+        Shot = self.env['cleaning.recording.shot']
+        for direction, reference in references.items():
+            if self.shot_ids.filtered(lambda s, d=direction: s.direction == d):
+                continue
+            Shot.sudo().create({
+                'recording_id': self.id,
+                'direction': direction,
+                'name': reference.name,
+                'sequence': DIRECTION_SEQUENCE.get(direction, 50),
+                'reference_image_id': reference.id,
+                'reference_write_date': reference.image_write_date,
+                'from_video': True,
+                'match_error': reason,
+                'matched_at': False,
+            })
+        self.invalidate_recordset(['shot_ids'])
+        self.modified(['shot_ids'])
+
+    def _extract_shots_from_video(self):
+        """Fill this round's views from its own recording.
+
+        One sweep of a room passes every wall in it, so the pictures are
+        already there - they have simply never been looked at. This reads them
+        back out, decides which frame shows which view, and stores the winner
+        as this round's photograph of that view, scored by exactly the
+        comparison that scores a photograph somebody took by hand. That is the
+        point: a round captured either way ends up as the same rows carrying
+        the same numbers, so nothing downstream has to know which it was.
+
+        Never raises. It runs inside an upload, and a recording that will not
+        decode is something to report on the round rather than a reason to lose
+        the round that carried it.
+
+        Returns the shots it stored.
+        """
+        self.ensure_one()
+        Shot = self.env['cleaning.recording.shot']
+        references = self.config_id._reference_by_direction()
+        if not references:
+            return Shot.browse()
+
+        frames = compare.video_frames(self._video_raw())
+        if not frames:
+            self._record_unseen_views(references, self.env._(
+                "This round's recording could not be read, so the views were "
+                "never checked against it."))
+            return Shot.browse()
+
+        # Once for the whole clip, not once per view. Four views over
+        # twenty-four frames used to mean ninety-six hashes, each decoding a
+        # JPEG that had just been encoded.
+        hashes = compare.frame_hashes(frames)
+
+        chosen = []
+        unseen = {}
+        # A frame shows one wall, so it can stand for one view. Walked in the
+        # order somebody turning on the spot meets them, so where two views
+        # want the same frame it goes to the one that comes first in the sweep
+        # and the other looks further down its own shortlist.
+        taken = set()
+        ordered = sorted(references.items(),
+                         key=lambda pair: DIRECTION_SEQUENCE.get(pair[0], 50))
+        for direction, reference in ordered:
+            # An original nobody has prepared yet cannot be matched against.
+            # Skipped rather than reported as unseen: the fault is in the
+            # setup, not in the sweep, and saying "the recording never showed
+            # this view" about it would send somebody to look for the wrong
+            # problem.
+            if not reference.signature:
+                continue
+            index, result = compare.best_frame(
+                reference.signature, reference._phash_int(), frames,
+                reference.features, reference.signature_padded,
+                hashes=hashes, skip=taken)
+            if index is None or not self._frame_shows_view(result):
+                unseen[direction] = reference
+                continue
+            taken.add(index)
+            chosen.append((
+                direction, frames[index], 'image/jpeg',
+                '%s_%s_%s.jpg' % (direction, self.slot_date, self.user_id.id),
+            ))
+
+        stored = self._store_direction_shots(chosen)
+        if stored:
+            # After storing, not as part of the create: _store_direction_shots
+            # is the photograph path too, and teaching it about video would put
+            # a flag in it that is False for every one of its other callers.
+            stored.sudo().write({'from_video': True})
+        if unseen:
+            self._record_unseen_views(unseen, self.env._(
+                "This round's recording never showed this view."))
+
+        # The stills the AI review reads. Real ones from across the sweep now,
+        # rather than the single frame the app grabs after recording stops.
+        # Only as many as the review was configured to want: twenty-four
+        # attachments per round is a lot of disk for pictures nothing reads.
+        wanted = self.config_id._ai_frames_wanted()
+        if wanted and not self._frame_attachments():
+            step = max(1, len(frames) // wanted)
+            self._store_frames([(blob, 'image/jpeg')
+                                for blob in frames[::step][:wanted]])
+        return stored
+
+    def action_extract_from_video(self):
+        """Read the views out of this round's recording. Manager button.
+
+        Wanted after an original is replaced, and - while the app is still
+        being taught about the choice - the only way to exercise the whole
+        video path at all: record from the browser, press this, read the
+        scores.
+
+        Reports rather than raises. A UserError would roll the transaction
+        back, and the rows saying which views the sweep missed are exactly the
+        thing worth keeping when the answer is disappointing.
+        """
+        self.ensure_one()
+        if not self.env.user.has_group(
+                'showroom_check.group_cleaning_manager'):
+            raise AccessError(self.env._(
+                "Only a Showroom Check Manager can read a round out of its "
+                "recording."))
+        if not self.video_file:
+            raise UserError(self.env._(
+                "This round has no recording to read the views out of."))
+
+        stored = self._extract_shots_from_video()
+        if stored:
+            message = self.env._(
+                "%(count)s view(s) were read out of the recording and scored.",
+                count=len(stored))
+        else:
+            message = self.env._(
+                "No view could be matched to this recording.\n\n"
+                "Either the recording could not be read - which needs OpenCV "
+                "installed on this server - or the sweep never showed a view "
+                "that has an original set.")
+        return {
+            'type': 'ir.actions.client',
+            'tag': 'display_notification',
+            'params': {
+                'type': 'success' if stored else 'warning',
+                'message': message,
+                'sticky': False,
+                'next': {'type': 'ir.actions.act_window_close'},
+            },
+        }
 
     def _recompute_and_summarise(self):
         """Re-score, and say what moved since the last time.

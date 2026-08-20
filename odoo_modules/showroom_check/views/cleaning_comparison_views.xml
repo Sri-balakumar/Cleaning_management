@@ -110,6 +110,7 @@
                             <field name="registered"/>
                             <field name="same_view"/>
                             <field name="match_count"/>
+                            <field name="from_video"/>
                             <field name="reference_replaced"/>
                             <templates>
                                 <t t-name="card">
@@ -125,7 +126,15 @@
                                             <field name="reference_image" widget="showroom_photo" nolabel="1"/>
                                         </div>
                                         <div class="col-6 ps-1">
-                                            <div class="cm-shot-label">Today</div>
+                                            <!-- Says where the picture came from, because it
+                                                 changes how a low score should be read: a frame
+                                                 off a sweep was framed however somebody happened
+                                                 to be holding the phone as they turned past it,
+                                                 where a photograph was aimed at the view. -->
+                                            <div class="cm-shot-label">
+                                                <t t-if="record.from_video.raw_value">From the recording</t>
+                                                <t t-else="">Today</t>
+                                            </div>
                                             <field name="image" widget="showroom_photo" nolabel="1"/>
                                         </div>
                                         <div class="col-12 mt-2">

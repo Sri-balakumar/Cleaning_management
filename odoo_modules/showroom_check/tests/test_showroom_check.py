@@ -2,12 +2,15 @@ import base64
 import io
 from datetime import date, datetime
 
+from dateutil.relativedelta import relativedelta
 from PIL import Image
 
+from odoo import fields
 from odoo.exceptions import AccessError, ValidationError
 from odoo.tests.common import TransactionCase, tagged
 from odoo.tools import mute_logger
 
+from ..models import cleaning_image_compare as compare
 from ..models.cleaning_config import float_to_time, format_float_time
 from ..models.cleaning_recording import base_mimetype
 
@@ -678,3 +681,187 @@ class TestCleaningManagement(TransactionCase):
         self.assertTrue(all(row['reference_url']
                             for row in settings['directions']))
 
+
+    # ------------------------------------------------------------------
+    # Reading a round out of its recording
+    # ------------------------------------------------------------------
+    def test_video_frames_never_raises_on_something_that_is_not_a_video(self):
+        """The one rule the whole feature rests on.
+
+        This runs inside an upload. A clip that will not decode has to come
+        back as "nothing", never as an exception, or a bad recording takes the
+        round that carried it down with it. True whether or not OpenCV is
+        installed, which is why this test is safe on any server.
+        """
+        self.assertEqual(compare.video_frames(b'this is not a video' * 500), [])
+        self.assertEqual(compare.video_frames(b''), [])
+        self.assertEqual(compare.video_frames(None), [])
+
+    def test_best_frame_picks_the_frame_that_matches_the_original(self):
+        """The whole of the video path in one assertion.
+
+        Three stills, one of which is the original itself. Whatever the server
+        can do - tiles alone, or tiles and feature matching - the one that IS
+        the picture has to win, or every score read out of a recording is a
+        score of the wrong wall.
+        """
+        reference = self._set_original('front')
+        frames = [self._jpeg(seed=90), self._jpeg(seed=0), self._jpeg(seed=40)]
+
+        index, result = compare.best_frame(
+            reference.signature, reference._phash_int(), frames,
+            reference.features, reference.signature_padded)
+
+        self.assertEqual(index, 1)
+        self.assertEqual(result['score'], 100)
+        self.assertEqual(result['hash_distance'], 0)
+
+    def test_best_frame_says_so_when_there_is_nothing_to_choose_from(self):
+        reference = self._set_original('front')
+
+        self.assertEqual(
+            compare.best_frame(reference.signature, reference._phash_int(), []),
+            (None, None))
+
+    def test_a_frame_of_another_view_is_not_accepted_as_this_one(self):
+        """A frame is only kept where it is of the view it was matched to.
+
+        The looser rule the photograph path uses - store it and flag it - is
+        wrong here. A photograph of the wrong wall is somebody's mistake worth
+        showing them; a frame of the wrong wall is just a frame, and there are
+        twenty-three others it could have been.
+        """
+        recording = self.env['cleaning.recording'].create(
+            self._recording_values(datetime(2026, 8, 17, 3, 40)))
+
+        self.assertFalse(recording._frame_shows_view(None))
+        self.assertFalse(recording._frame_shows_view({'score': None}))
+        # Feature matching ran and said no. Its answer wins outright.
+        self.assertFalse(recording._frame_shows_view(
+            {'score': 90, 'same_view': False, 'hash_distance': 0}))
+        self.assertTrue(recording._frame_shows_view(
+            {'score': 10, 'same_view': True, 'hash_distance': 60}))
+        # No feature matching on this server: the hash is all there is.
+        self.assertTrue(recording._frame_shows_view(
+            {'score': 80, 'same_view': None, 'hash_distance': 3}))
+        self.assertFalse(recording._frame_shows_view(
+            {'score': 80, 'same_view': None, 'hash_distance': 40}))
+
+    def test_a_recording_that_cannot_be_read_says_so_on_every_view(self):
+        """A row with a reason, not a gap.
+
+        The Comparisons list is read by counting cards, so a view that is
+        simply absent reads as a round nobody finished. An unscored row
+        carrying a sentence reads as what actually happened.
+        """
+        self._set_original('front')
+        self._set_original('left')
+        recording = self.env['cleaning.recording'].create(
+            self._recording_values(datetime(2026, 8, 17, 3, 40)))
+        recording._attach_video(b'not a video at all' * 300, 'r.mp4', 'video/mp4')
+
+        stored = recording._extract_shots_from_video()
+
+        self.assertFalse(stored)
+        self.assertEqual(len(recording.shot_ids), 2)
+        for shot in recording.shot_ids:
+            self.assertTrue(shot.from_video)
+            self.assertFalse(shot.matched_at)
+            self.assertEqual(shot.match_level, 'unknown')
+            self.assertIn('could not be read', shot.match_error)
+
+    def test_reading_a_recording_never_overwrites_a_photograph(self):
+        """A view somebody photographed by hand is not missing, whatever the
+        sweep did or failed to do."""
+        self._set_original('front')
+        recording = self.env['cleaning.recording'].create(
+            self._recording_values(datetime(2026, 8, 17, 3, 40)))
+        recording._store_direction_shots(
+            [('front', self._jpeg(), 'image/jpeg', 'front.jpg')])
+        recording._attach_video(b'not a video at all' * 300, 'r.mp4', 'video/mp4')
+
+        recording._extract_shots_from_video()
+
+        self.assertEqual(len(recording.shot_ids), 1)
+        shot = recording.shot_ids
+        self.assertFalse(shot.from_video)
+        self.assertFalse(shot.match_error)
+
+    def test_a_photographs_round_is_timed_by_the_walk_not_by_the_clip(self):
+        """The chosen mode beats the configured mode.
+
+        With the video on, a round used to be allowed only the clip's duration
+        plus the grace period. Somebody who CHOSE to photograph the round
+        instead was then refused as back-dated the moment walking the room took
+        longer than the clip would have - which is most of them.
+        """
+        self.config.write({'video_enabled': True, 'duration_value': 30,
+                           'duration_unit': 'seconds',
+                           'upload_grace_seconds': 60})
+        # A window that is always open, so only the timing rule is under test.
+        self.slot.write({'hour_from': 0.0, 'hour_to': 23.98})
+
+        started = fields.Datetime.now() - relativedelta(seconds=200)
+        values = self._recording_values(started)
+
+        # Nothing said about how it was captured, so the old rule applies and
+        # 200 seconds is far past a 30 second clip plus 60 seconds of grace.
+        with self.assertRaises(ValidationError):
+            self.env['cleaning.recording'].with_user(self.cleaner).create(values)
+
+        # Said to be a photographs round: timed by the walk instead.
+        recording = self.env['cleaning.recording'].with_user(
+            self.cleaner).create(dict(values, capture_kind='photographs'))
+        self.assertEqual(recording.capture_kind, 'photographs')
+
+    # ------------------------------------------------------------------
+    # Scoring: the worst region, and whether a warp earned its place
+    # ------------------------------------------------------------------
+    def test_the_score_is_decided_by_the_worst_region(self):
+        """One bad patch decides the score; the calm rest of the room does not.
+
+        The whole point of HOT_FRACTION. A hundred quiet tiles and a handful of
+        loud ones must not average out into "nothing happened" - that is the
+        failure the worst-region rule exists to prevent.
+        """
+        quiet = [(index, 2.0) for index in range(100)]
+        loud = [(200 + index, 90.0) for index in range(6)]
+
+        tiles, mean = compare._hot(quiet + loud)
+
+        self.assertTrue(set(tiles).issubset({200 + i for i in range(6)}))
+        self.assertGreater(mean, 50.0)
+        self.assertEqual(compare._hot([]), ([], None))
+
+    def test_a_difference_becomes_a_score_out_of_a_hundred(self):
+        self.assertEqual(compare._tile_score(0.0), 100)
+        self.assertEqual(compare._tile_score(200.0), 0)
+        # Nothing measured is not the same as a difference of nothing.
+        self.assertIsNone(compare._tile_score(None))
+
+    def test_a_photograph_compared_with_itself_scores_top_marks(self):
+        """The cheapest regression check there is.
+
+        99 rather than 100 where OpenCV is installed, and that is not a fault:
+        the picture is warped onto itself before scoring, and resampling costs
+        about a grey level even when the alignment is perfect. Asserted as a
+        floor rather than an exact number so it documents the real behaviour
+        instead of pinning a rounding.
+
+        This is also the case the registration check had to be careful about.
+        Warping is not free, so a rule of "the warp must be strictly better"
+        declined it here - and with it the registered flag on every well-framed
+        round in the database, which then all banded as "Could not line up".
+        That is why REGISTER_SLACK is not zero.
+        """
+        raw = self._jpeg()
+        signature, phash, features, padded = compare.signature_for(raw)
+
+        result = compare.compare(signature, phash, raw, features, padded)
+
+        self.assertIsNone(result['error'])
+        self.assertGreaterEqual(result['score'], 99)
+        if compare.cv2 is not None:
+            self.assertTrue(
+                result['registered'],
+                "an original warped onto itself must still count as lined up")

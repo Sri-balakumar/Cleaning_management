@@ -58,6 +58,13 @@ class CleaningRecordingShot(models.Model):
     image = fields.Binary(string='Photograph', attachment=True, readonly=True)
     image_filename = fields.Char(readonly=True)
     file_size = fields.Integer(readonly=True, aggregator='sum')
+    from_video = fields.Boolean(
+        string='Read From The Recording', readonly=True,
+        help="This picture was cut out of the round's own recording rather "
+             "than photographed on its own. Worth knowing beside a low score: "
+             "a frame off a sweep is framed however somebody happened to be "
+             "holding the phone as they turned past, where a photograph was "
+             "aimed.")
 
     reference_image_id = fields.Many2one(
         'cleaning.reference.image', string='Compared Against',

@@ -22,7 +22,9 @@ import base64
 import io
 import logging
 import math
+import os
 import struct
+import tempfile
 
 from PIL import Image, ImageFilter, ImageOps
 
@@ -262,6 +264,34 @@ def _aligned_deltas(reference, capture):
     return best[1], best[2]
 
 
+def _hot(pairs):
+    """The worst tiles and their mean difference, as `(tiles, mean)`.
+
+    Worst-region rather than whole-frame - see HOT_FRACTION. Written once and
+    called from all three places that need it: the plain comparison, the
+    registered one, and the check between them that decides which to believe.
+    Three copies of this arithmetic is how they drift apart, and the moment two
+    of them disagree the check comparing their answers is measuring nothing.
+
+    `([], None)` where there is nothing to rank.
+    """
+    if not pairs:
+        return [], None
+    hot_count = max(1, int(round(len(pairs) * HOT_FRACTION)))
+    ranked = sorted(pairs, key=lambda pair: pair[1], reverse=True)
+    hot = ranked[:hot_count]
+    return (sorted(tile for tile, _delta in hot),
+            sum(delta for _tile, delta in hot) / float(hot_count))
+
+
+def _tile_score(hot_mean):
+    """A worst-region mean difference, as a score out of 100. See DELTA_GAIN."""
+    if hot_mean is None:
+        return None
+    return max(0, min(100, int(round(
+        100.0 - min(100.0, hot_mean * DELTA_GAIN)))))
+
+
 def compare(reference_signature, reference_hash, capture_raw,
             reference_features=None, reference_padded=None):
     """Score today's photograph against a stored original.
@@ -299,18 +329,11 @@ def compare(reference_signature, reference_hash, capture_raw,
     if not pairs:
         return dict(blank, error="These two pictures could not be lined up.")
 
-    # Worst-region, not whole-frame. See HOT_FRACTION.
-    hot_count = max(1, int(round(len(pairs) * HOT_FRACTION)))
-    ranked = sorted(pairs, key=lambda pair: pair[1], reverse=True)
-    hot = ranked[:hot_count]
-    hot_mean = sum(delta for _tile, delta in hot) / float(hot_count)
-
-    tile_score = int(round(100.0 - min(100.0, hot_mean * DELTA_GAIN)))
-    tile_score = max(0, min(100, tile_score))
+    hot_tiles, hot_mean = _hot(pairs)
+    tile_score = _tile_score(hot_mean)
 
     result = dict(blank, score=tile_score, tile_score=tile_score,
-                  hot_tiles=sorted(tile for tile, _delta in hot),
-                  offset=offset)
+                  hot_tiles=hot_tiles, offset=offset)
 
     if reference_hash is not None:
         try:
@@ -355,21 +378,64 @@ def compare(reference_signature, reference_hash, capture_raw,
     # Only the tiles the warp actually landed on. Anything below half
     # coverage is edge, where the resampled average is part real picture and
     # part black frame, and would read as a change that is not there.
-    pairs = [(index, abs(padded_reference[index] - warped[index]))
-             for index in range(GRID * GRID) if coverage[index] > 127]
-    if len(pairs) < GRID:
+    common = [index for index in range(GRID * GRID) if coverage[index] > 127]
+    if len(common) < GRID:
         return result
 
-    hot_count = max(1, int(round(len(pairs) * HOT_FRACTION)))
-    ranked = sorted(pairs, key=lambda pair: pair[1], reverse=True)
-    hot = ranked[:hot_count]
-    hot_mean = sum(delta for _tile, delta in hot) / float(hot_count)
+    # Did warping actually make the two pictures agree MORE?
+    #
+    # Nothing used to ask. A homography can clear _plausible_homography and the
+    # inlier floors and still be confidently wrong - on a repetitive subject
+    # RANSAC has plenty of ways to be self-consistent about the wrong pairing,
+    # which is the same failure ORB_RATIO was tightened for - and the registered
+    # score then replaced a perfectly good answer with a worse one.
+    #
+    # Measured on a synthetic showroom of shelving and boxes, against variants
+    # standing for what really happens between two rounds. The figure is the
+    # separation between the worst "nothing moved" score and the best "something
+    # did" - the room a threshold has to sit in, so bigger is better and
+    # negative means no threshold can be right:
+    #
+    #                                        separation
+    #   registration replacing the score        -52
+    #   no feature matching at all              -18
+    #   registration only where it helped        (this)
+    #
+    # Turning the whole thing off beat leaving it on, which is the sign that the
+    # warp - not the matching - was doing the damage.
+    #
+    # Both sides must be measured in the SAME frame over the SAME tiles or the
+    # comparison means nothing: the score at the top of this function is
+    # computed on a stretched square, and this one in the letterboxed square the
+    # warp lands in. So "before" is recomputed here, padded and aligned, rather
+    # than reusing a number that was never about these pixels.
+    try:
+        padded_capture = padded_tile_signature(capture_raw)
+    except CompareError:
+        return result
 
-    registered_score = max(0, min(100, int(round(
-        100.0 - min(100.0, hot_mean * DELTA_GAIN)))))
-    result['score'] = registered_score
-    result['tile_score'] = registered_score
-    result['hot_tiles'] = sorted(tile for tile, _delta in hot)
+    before_pairs, _before_offset = _aligned_deltas(padded_reference, padded_capture)
+    landed = set(common)
+    _before_tiles, before = _hot([(tile, delta) for tile, delta in before_pairs
+                                  if tile in landed])
+
+    after_pairs = [(index, abs(padded_reference[index] - warped[index]))
+                   for index in common]
+    after_tiles, after = _hot(after_pairs)
+
+    # No better, so the warp is declined and the plain answer stands.
+    #
+    # `registered` staying False is not a shrug - it already bands as "Could not
+    # line up" and already tells a manager the framing could not be trusted,
+    # which is exactly what just happened. same_view and similarity are left as
+    # they are: they come from the match counts and have nothing to do with
+    # whether the warp was any good.
+    if before is None or after is None or after > before + REGISTER_SLACK:
+        return result
+
+    result['score'] = _tile_score(after)
+    result['tile_score'] = result['score']
+    result['hot_tiles'] = after_tiles
     result['registered'] = True
     result['offset'] = (0, 0)
     return result
@@ -458,6 +524,27 @@ MIN_REGISTER_INLIERS = 20    # below this, the homography is not worth trusting
 #     to four times is not two photographs of one room.
 MIN_INLIER_RATIO = 0.40
 MAX_REGISTER_SCALE = 4.0
+
+# How much worse a warp may leave things before it is declined, in grey levels.
+#
+# Not zero, because warping is not free: resampling a picture onto another
+# picture's frame costs about a grey level even when the homography is perfect.
+# Measured by comparing an original against ITSELF, where the right answer is
+# obviously "keep the warp" - before 0.00, after 1.00. A strict "must be better"
+# rule threw that away, and with it the registered flag on every well-framed
+# round in the database, which then all banded as "Could not line up".
+#
+# Two grey levels sits well clear of that and nowhere near a real failure. The
+# warps worth declining are not marginal - on a synthetic showroom of repetitive
+# shelving they left the residual two to three times worse:
+#
+#                                      before   after
+#   stood 3% left                       17.75   59.54   declined
+#   stood 8% left                       15.36   55.92   declined
+#   stood somewhere else                17.15   38.92   declined
+#   an original against itself           0.00    1.00   kept
+#   bags gone, stood 5% left            29.83   31.00   kept
+REGISTER_SLACK = 2.0
 
 # "How much of the same thing is in these two pictures", which is a different
 # question from the match score and the one people actually ask when they
@@ -769,3 +856,254 @@ def signature_for(raw):
         _logger.warning("Showroom Check: could not prepare an original - %s", exc)
         return None, None, None, None
     return signature, phash, encode_features(orb_features(raw)), padded
+
+
+# ----------------------------------------------------------------------
+# Reading a round out of a recording
+# ----------------------------------------------------------------------
+# A clip is not evidence until something has looked at it. What follows turns
+# one into the same photographs the comparison already understands, so a round
+# recorded as a single sweep is scored by exactly the code that scores a round
+# somebody photographed a view at a time. Nothing below knows what a view is;
+# it is handed an original and a pile of stills and says which still matches.
+
+# 24 stills across the clip. A thirty second sweep of four walls spends roughly
+# seven seconds on each, so 24 puts five or six frames on every wall while
+# still costing one pass. Going finer mostly buys more frames of the same wall.
+FRAME_SAMPLE_COUNT = 24
+
+# How many frames per view are compared properly. The dHash is coarse - 64 bits
+# of overall shape - which is useless for spotting a missing bag and exactly
+# right for "which of these 24 is even pointed at this wall". Comparing all 24
+# against all four views is ~96 ORB runs; shortlisting first makes it 32.
+#
+# Three was too tight, and it showed: half the frames of a sweep are caught
+# mid-pan, and a blurred wall can out-rank a clean one on overall shape alone.
+# Where all three happened to be blur, nothing cleared the same-view gate and
+# the view was written off as one the recording never showed - with the frame
+# that shows it perfectly sitting at position twelve, never looked at. Eight of
+# twenty-four leaves that far less room to happen, and the hashes are now
+# computed once for the whole clip rather than once per view, which more than
+# pays for the extra comparisons.
+FRAME_SHORTLIST = 8
+
+# What a still is encoded at on its way out of the clip, and the size it is cut
+# down to - the same figures as STORED_QUALITY and STORED_LONG_EDGE in the
+# settings, deliberately repeated rather than imported. This module stays
+# runnable without the ORM, which is the whole reason it can be exercised from
+# a shell with two JPEGs and no database.
+FRAME_QUALITY = 82
+FRAME_LONG_EDGE = 1600
+
+# Only used where the container will not say how long it is. Every fifteenth
+# frame is about twice a second, and the scan stops after enough of them, so a
+# file that claims to be a video and never ends cannot walk forever.
+SCAN_STRIDE = 15
+
+
+def _encode_frame(frame):
+    """One decoded frame -> JPEG bytes, cut down to FRAME_LONG_EDGE.
+
+    Cut down here rather than later so that what is compared, what is stored
+    and what an AI is later shown are all the same picture - the same reason
+    `_attach_image` resizes a photograph on the way in.
+    """
+    height, width = frame.shape[:2]
+    longest = max(height, width)
+    if longest > FRAME_LONG_EDGE:
+        scale = FRAME_LONG_EDGE / float(longest)
+        frame = cv2.resize(
+            frame, (max(1, int(width * scale)), max(1, int(height * scale))),
+            interpolation=cv2.INTER_AREA)
+    ok, buffer = cv2.imencode(
+        '.jpg', frame, [int(cv2.IMWRITE_JPEG_QUALITY), FRAME_QUALITY])
+    return buffer.tobytes() if ok else None
+
+
+def _seek_frames(capture, total, count):
+    """`count` stills spread across a clip whose length is known.
+
+    Seeking rather than decoding everything: five minutes is nine thousand
+    frames, and decoding all of them to keep 24 would take longer than the
+    upload this runs inside.
+
+    Spread across the middle of each slice rather than the whole span, because
+    the first frame of a phone recording is often still auto-exposing and the
+    last can be a half-written one.
+    """
+    frames = []
+    for index in range(count):
+        position = min(int(total * (index + 0.5) / count), total - 1)
+        capture.set(cv2.CAP_PROP_POS_FRAMES, position)
+        ok, frame = capture.read()
+        if not ok:
+            continue
+        blob = _encode_frame(frame)
+        if blob:
+            frames.append(blob)
+    return frames
+
+
+def _scan_frames(capture, count, stride=SCAN_STRIDE):
+    """`count` stills from a clip that will not say how long it is.
+
+    Read straight through keeping every stride-th frame, encoding as it goes so
+    that only the JPEGs accumulate. Holding decoded frames instead would be
+    gigabytes: one 1080p frame is around six megabytes.
+    """
+    frames = []
+    index = 0
+    while len(frames) < count and index < count * stride:
+        ok, frame = capture.read()
+        if not ok:
+            break
+        if index % stride == 0:
+            blob = _encode_frame(frame)
+            if blob:
+                frames.append(blob)
+        index += 1
+    return frames
+
+
+def video_frames(raw, count=FRAME_SAMPLE_COUNT):
+    """Evenly spaced JPEG stills out of a clip, oldest first.
+
+    Returns `[]` where it cannot be done - no OpenCV, a container it will not
+    decode, or a file that is not a video at all. Never raises, for the same
+    reason `compare` never does: this runs inside an upload, and a clip that
+    will not decode is something to report rather than a reason to lose the
+    round that carried it.
+
+    OpenCV reads from a path and not from memory, so the bytes go through a
+    temporary file, removed even when the decode blows up.
+    """
+    if cv2 is None or not raw:
+        return []
+
+    path = None
+    try:
+        handle, path = tempfile.mkstemp(suffix='.video')
+        with os.fdopen(handle, 'wb') as stream:
+            stream.write(raw)
+
+        capture = cv2.VideoCapture(path)
+        if not capture.isOpened():
+            _logger.warning(
+                "Showroom Check: a recording could not be opened for reading. "
+                "OpenCV is installed but will not decode this container.")
+            return []
+        try:
+            total = int(capture.get(cv2.CAP_PROP_FRAME_COUNT) or 0)
+            frames = _seek_frames(capture, total, count) if total > 0 else []
+            if frames:
+                return frames
+            # Either the length was unknown, or it was reported and seeking
+            # against it produced nothing. Both end up here.
+            capture.set(cv2.CAP_PROP_POS_FRAMES, 0)
+            return _scan_frames(capture, count)
+        finally:
+            capture.release()
+    except Exception:  # noqa: BLE001 - a bad clip may not fail an upload
+        _logger.exception("Showroom Check: could not read a recording.")
+        return []
+    finally:
+        if path:
+            try:
+                os.unlink(path)
+            except OSError:
+                pass
+
+
+def _frame_rank(result):
+    """How good a candidate a compared frame is. Bigger is better.
+
+    Same view before anything else: a frame of the right wall scoring badly IS
+    the answer - the room changed - whereas a frame of the wrong wall scoring
+    well is not an answer at all. Then whether it lined up, because a registered
+    score is measured on pixels that correspond and an unregistered one is not.
+    Only then the numbers themselves.
+    """
+    return (
+        1 if result.get('same_view') else 0,
+        1 if result.get('registered') else 0,
+        result.get('similarity') or 0,
+        result.get('score') or 0,
+    )
+
+
+def frame_hashes(frames):
+    """The dHash of every frame, once, in the same order.
+
+    `best_frame` is called once per view and hashes everything it is given, so
+    four views over twenty-four frames is ninety-six hashes where twenty-four
+    would do - each one decoding a JPEG that was encoded moments earlier. The
+    caller computes this once and hands it to all of them.
+
+    `None` marks a frame that would not hash, so the positions still line up
+    with `frames`. Deliberately the same `difference_hash` the originals were
+    hashed with: these numbers are only meaningful compared against those, and
+    a faster hash computed a different way would not be.
+    """
+    hashes = []
+    for blob in frames:
+        try:
+            hashes.append(difference_hash(blob))
+        except (CompareError, TypeError, ValueError):
+            hashes.append(None)
+    return hashes
+
+
+def best_frame(reference_signature, reference_hash, frames,
+               reference_features=None, reference_padded=None,
+               limit=FRAME_SHORTLIST, hashes=None, skip=None):
+    """Which of `frames` best shows the view the reference describes.
+
+    Returns `(index, result)`, where `result` is a `compare` dict, or
+    `(None, None)` where nothing could be compared at all.
+
+    Whether the winner is good ENOUGH is deliberately not decided here. This
+    returns a measurement; the threshold that turns it into a verdict lives
+    with the other thresholds, and putting it here would mean two places
+    disagreeing about what counts as the same view.
+
+    The arguments mirror `compare` exactly, because every one of them is handed
+    straight to it.
+
+    `hashes` is what `frame_hashes` returned, so a caller matching several views
+    against the same clip pays for them once. `skip` is the frames already given
+    to another view: one sweep cannot show two walls in the same instant, so a
+    frame that is spoken for is passed over rather than won twice.
+    """
+    if not frames:
+        return None, None
+
+    if hashes is None:
+        hashes = frame_hashes(frames)
+    taken = skip or ()
+
+    # Coarse pass first, on overall shape alone. See FRAME_SHORTLIST.
+    ranked = []
+    for index, value in enumerate(hashes):
+        if value is None or index in taken:
+            continue
+        try:
+            ranked.append((hamming(int(reference_hash), value), index))
+        except (CompareError, TypeError, ValueError):
+            continue
+
+    # No usable hash anywhere - an original saved before hashing, or nothing
+    # that decoded. Compare the first few properly rather than giving up: a
+    # missing hash is a gap in the original, not evidence about the frames.
+    shortlist = ([index for _distance, index in sorted(ranked)[:limit]]
+                 if ranked
+                 else [i for i in range(len(frames)) if i not in taken][:limit])
+
+    best_index, best_result = None, None
+    for index in shortlist:
+        result = compare(reference_signature, reference_hash, frames[index],
+                         reference_features, reference_padded)
+        if result['score'] is None:
+            continue
+        if best_result is None or _frame_rank(result) > _frame_rank(best_result):
+            best_index, best_result = index, result
+    return best_index, best_result

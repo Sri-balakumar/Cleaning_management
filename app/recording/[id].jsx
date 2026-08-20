@@ -325,7 +325,7 @@ function RecordingScreen() {
                 out. Absent entirely on a video-only round. */}
             {shots.length ? (
               <InfoCard title={t.sectionPhotographs}>
-                <RoundPhotos baseUrl={connection.baseUrl} shots={shots} />
+                <RoundPhotos baseUrl={connection.baseUrl} recordingId={id} shots={shots} />
               </InfoCard>
             ) : null}
 

@@ -134,6 +134,7 @@
                             <group>
                                 <group>
                                     <field name="video_enabled" widget="boolean_toggle"/>
+                                    <field name="opencv_available" invisible="1"/>
                                 </group>
                             </group>
                             <div class="alert alert-secondary" role="alert"
@@ -141,6 +142,38 @@
                                 The video is switched off, so a round is the
                                 photographs and nothing else. Everything below
                                 describes the video and is not in use.
+                            </div>
+                            <!-- Only where the video is on AND the server cannot
+                                 read one. Saying it on a photographs-only site
+                                 would be warning somebody about a feature they
+                                 have switched off. -->
+                            <div class="alert alert-warning" role="alert"
+                                 invisible="not video_enabled or opencv_available">
+                                <strong>Recordings cannot be checked on this
+                                server.</strong>
+                                A round recorded as a video is checked by finding
+                                each view inside the recording, and that needs
+                                OpenCV, which is not installed here. Videos will
+                                still be recorded and kept, but nothing will be
+                                scored from them, and the app will ask for the
+                                photographs instead.
+                                <br/>
+                                It is installed automatically when this module
+                                is installed or upgraded, so the usual reason it
+                                is missing is that the account the server runs
+                                as cannot write to its own Python folder. Grant
+                                that, then try again here.
+                                <div class="mt-2">
+                                    <button name="action_install_opencv"
+                                            type="object" class="btn btn-primary btn-sm"
+                                            groups="base.group_system"
+                                            string="Install it now"/>
+                                </div>
+                                <div class="mt-2 small">
+                                    Or run this as that account, then restart
+                                    the service:
+                                    <em>pip install opencv-python-headless</em>
+                                </div>
                             </div>
 
                             <!-- Which physical camera is used is remembered per

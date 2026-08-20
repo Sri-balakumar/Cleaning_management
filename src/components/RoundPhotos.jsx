@@ -2,8 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { ActivityIndicator, Image, Pressable, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 
-import { fetchMatchProof, fetchShotImage } from '../api/cleaning';
-import { fetchReferenceImageData } from '../api/config';
+import { fetchMatchProof, fetchRoundImages } from '../api/cleaning';
 import { ImageViewer } from './ImageViewer';
 import { useT } from '../i18n/LanguageProvider';
 import { colors, radius, spacing, typography } from '../theme';
@@ -32,9 +31,39 @@ const BANDS = {
   unaligned: { key: 'matchUnaligned', color: colors.textMuted, bg: colors.surfaceAlt, border: colors.border },
 };
 
-export function RoundPhotos({ baseUrl, shots }) {
+/** Many2one fields arrive as `[id, "Display Name"]`. */
+const referenceIdOf = (shot) =>
+  Array.isArray(shot.reference_image_id) ? shot.reference_image_id[0] : shot.reference_image_id;
+
+export function RoundPhotos({ baseUrl, recordingId, shots }) {
   const { t } = useT();
   const [viewing, setViewing] = useState(null);
+  // Every picture for the round in one go. Each card used to fetch its own two,
+  // so four views sent eight full-size images at once and the ones at the back
+  // of the queue looked broken rather than merely slow.
+  const [images, setImages] = useState({ shots: {}, originals: {} });
+
+  // Joined into a string on purpose: the shots array is rebuilt by the screen
+  // above on every render, so depending on it directly would re-fetch every
+  // picture each time. The ids are what actually decide what to ask for.
+  const referenceKey = shots.map(referenceIdOf).filter(Boolean).join(',');
+
+  useEffect(() => {
+    if (!recordingId) return undefined;
+    let live = true;
+    fetchRoundImages(
+      baseUrl,
+      recordingId,
+      referenceKey ? referenceKey.split(',').map(Number) : [],
+    )
+      .then((loaded) => live && setImages(loaded))
+      // Pictures that will not load cost the pictures, not the verdicts beside
+      // them - which are the part actually worth reading.
+      .catch(() => {});
+    return () => {
+      live = false;
+    };
+  }, [baseUrl, recordingId, referenceKey]);
 
   // Fetched on demand rather than with the round. It is looked at when a
   // number is doubted, which is rarely, and it is a bigger picture than
@@ -55,8 +84,9 @@ export function RoundPhotos({ baseUrl, shots }) {
       {shots.map((shot, index) => (
         <ShotRow
           key={shot.id}
-          baseUrl={baseUrl}
           shot={shot}
+          image={images.shots[shot.id] || null}
+          original={images.originals[referenceIdOf(shot)] || null}
           last={index === shots.length - 1}
           onOpen={setViewing}
           onProof={openProof}
@@ -74,41 +104,16 @@ export function RoundPhotos({ baseUrl, shots }) {
   );
 }
 
-function ShotRow({ baseUrl, shot, last, onOpen, onProof }) {
+/**
+ * One view: the picture, the original, the verdict.
+ *
+ * Both pictures are handed down rather than fetched here. The row still draws
+ * from the name and the score straight away and fills in when they arrive --
+ * the difference is that they now arrive together, on one round trip for the
+ * whole round, instead of two per card racing each other for a worker.
+ */
+function ShotRow({ shot, image, original, last, onOpen, onProof }) {
   const { t, rtlRow, rtlText } = useT();
-  const [image, setImage] = useState(null);
-  const [original, setOriginal] = useState(null);
-
-  // Both pictures after the card is on screen, not before it. The row draws
-  // from the name and the score straight away and fills in as they arrive.
-  const referenceId = Array.isArray(shot.reference_image_id)
-    ? shot.reference_image_id[0]
-    : shot.reference_image_id;
-
-  useEffect(() => {
-    let live = true;
-    fetchShotImage(baseUrl, shot.id)
-      .then((data) => live && setImage(data))
-      // A picture that will not load costs the picture, not the verdict beside
-      // it - which is the part actually worth reading.
-      .catch(() => {})
-      .finally(() => {});
-    return () => {
-      live = false;
-    };
-  }, [baseUrl, shot.id]);
-
-  useEffect(() => {
-    if (!referenceId) return undefined;
-    let live = true;
-    fetchReferenceImageData(baseUrl, referenceId)
-      .then((data) => live && setOriginal(data))
-      .catch(() => {})
-      .finally(() => {});
-    return () => {
-      live = false;
-    };
-  }, [baseUrl, referenceId]);
 
   const band = BANDS[shot.match_level] || BANDS.unknown;
 
@@ -130,7 +135,12 @@ function ShotRow({ baseUrl, shot, last, onOpen, onProof }) {
           name={shot.name}
           onOpen={onOpen}
         />
-        <Pane label={t.todayLabel} base64={image} name={shot.name} onOpen={onOpen} />
+        <Pane
+          label={shot.from_video ? t.fromRecordingLabel : t.todayLabel}
+          base64={image}
+          name={shot.name}
+          onOpen={onOpen}
+        />
       </View>
 
       <View style={[styles.scoreRow, rtlRow]}>
