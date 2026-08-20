@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+
+    <!--
+        The answer to pressing Compare again.
+
+        No action but Close: nothing here is editable and nothing is saved. The
+        button already did the work before this opened, so this is a report on
+        it rather than a step in it.
+    -->
+    <record id="view_cleaning_compare_result_form" model="ir.ui.view">
+        <field name="name">cleaning.compare.result.form</field>
+        <field name="model">cleaning.compare.result</field>
+        <field name="arch" type="xml">
+            <form string="Compared Again">
+                <field name="changed" invisible="1"/>
+
+                <div class="alert alert-success d-flex align-items-start gap-2"
+                     role="status" invisible="changed">
+                    <i class="fa fa-check-circle mt-1"/>
+                    <div>
+                        <strong>Nothing changed.</strong>
+                        <field name="summary" nolabel="1" readonly="1"
+                               class="cm-compare-summary"/>
+                    </div>
+                </div>
+
+                <div class="alert alert-info d-flex align-items-start gap-2"
+                     role="status" invisible="not changed">
+                    <i class="fa fa-refresh mt-1"/>
+                    <div>
+                        <strong>These views changed since the last comparison:</strong>
+                        <field name="summary" nolabel="1" readonly="1"
+                               class="cm-compare-summary"/>
+                    </div>
+                </div>
+
+                <footer>
+                    <button string="Close" class="btn-primary" special="cancel"/>
+                </footer>
+            </form>
+        </field>
+    </record>
+
+</odoo>

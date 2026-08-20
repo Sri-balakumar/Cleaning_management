@@ -75,7 +75,7 @@
                     -->
                     <div class="cm-comparison-summary">
                         <span invisible="not matched_at or match_level == 'unknown'">
-                            Match <field name="match_score" nolabel="1" class="oe_inline"/>%
+                            Match: <field name="match_score" nolabel="1" class="oe_inline"/>%
                         </span>
                         <span invisible="matched_at and match_level != 'unknown'">
                             Not compared
@@ -103,6 +103,13 @@
                             <field name="match_level"/>
                             <field name="match_error"/>
                             <field name="matched_at"/>
+                            <field name="view_mismatch"/>
+                            <field name="poorly_framed"/>
+                            <field name="score_approximate"/>
+                            <field name="similarity"/>
+                            <field name="registered"/>
+                            <field name="same_view"/>
+                            <field name="match_count"/>
                             <field name="reference_replaced"/>
                             <templates>
                                 <t t-name="card">
@@ -115,22 +122,26 @@
                                         </div>
                                         <div class="col-6 pe-1">
                                             <div class="cm-shot-label">How it should look</div>
-                                            <img t-att-src="'/web/image/cleaning.reference.image/' + record.reference_image_id.raw_value + '/image'"
-                                                 class="cm-shot-img" alt="How it should look"/>
+                                            <field name="reference_image" widget="showroom_photo" nolabel="1"/>
                                         </div>
                                         <div class="col-6 ps-1">
                                             <div class="cm-shot-label">Today</div>
-                                            <img t-att-src="'/web/image/cleaning.recording.shot/' + record.id.raw_value + '/image'"
-                                                 class="cm-shot-img" alt="Today"/>
+                                            <field name="image" widget="showroom_photo" nolabel="1"/>
                                         </div>
                                         <div class="col-12 mt-2">
-                                            <!-- Only where there is a real one. An
-                                                 unscored photograph showing "0" would
-                                                 read as the worst possible result
-                                                 rather than as no result. -->
-                                            <div t-if="record.matched_at.raw_value"
+                                            <!-- Two different questions, and they must not be confused. Similar
+                                                 is how much of the same thing is in both pictures, and can
+                                                 always be answered. Match is whether anything moved, and only
+                                                 means something once the two were lined up - so it is shown
+                                                 only then, or on a server with no feature matching at all,
+                                                 where the old tile score is the only answer there is. -->
+                                            <div t-if="record.same_view.raw_value" class="cm-similar-row">
+                                                <span class="cm-similar">Similar: <field name="similarity"/>%</span>
+                                                <field name="match_count" widget="showroom_match_proof" nolabel="1"/>
+                                            </div>
+                                            <div t-if="record.registered.raw_value or (!record.same_view.raw_value and record.matched_at.raw_value)"
                                                  t-attf-class="cm-score cm-score-{{record.match_level.raw_value}}">
-                                                Match <field name="match_score"/>%
+                                                Match: <field name="match_score"/>%
                                             </div>
                                             <!-- What changed, in words - the one thing
                                                  no measurement produces. Or why it could
@@ -144,6 +155,32 @@
                                                  class="cm-shot-note text-danger">
                                                 <field name="match_error"/>
                                             </div>
+                                            <!-- Same view, and still not lined up: the score is about
+                                                 pixels that do not correspond, so it means very little.
+                                                 The one message that says what to do about it. -->
+                                            <div class="text-warning small mt-1"
+                                                 t-if="record.poorly_framed.raw_value">
+                                                Photographed from too different a position to line up against
+                                                the original, so this score means little. Retake the original
+                                                from where the round is actually walked.
+                                            </div>
+                                            <!-- A different question from the
+                                                 score, and the score cannot tell
+                                                 it apart: wrong framing and an
+                                                 emptied room both read as 0. -->
+                                            <div class="text-warning small mt-1"
+                                                 t-if="record.view_mismatch.raw_value">
+                                                These may not be the same view -
+                                                check the original for this view was
+                                                taken from where the round is
+                                                actually walked.
+                                            </div>
+                                            <button name="action_use_as_original" type="object"
+                                                    class="btn btn-sm btn-link ps-0 cm-use-original"
+                                                    icon="fa-arrow-circle-left"
+                                                    groups="showroom_check.group_cleaning_manager"
+                                                    confirm="Use this photograph as the original for this view? Every round for this view will be compared again."
+                                                    string="Use this as the original"/>
                                             <div class="text-warning small mt-1"
                                                  t-if="record.reference_replaced.raw_value">
                                                 The original for this view has been

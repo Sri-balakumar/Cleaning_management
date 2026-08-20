@@ -112,6 +112,11 @@ const SHOT_FIELDS = [
   // side - the comparison is the point, and one picture alone cannot make it.
   'reference_image_id',
   'match_score', 'match_level', 'match_error', 'matched_at',
+  // What the server now knows beyond the score. Without these every
+  // branch on the card silently takes its false path: no Similar, no
+  // advisories, and a Match figure shown where none was measured.
+  'similarity', 'match_count', 'registered', 'same_view',
+  'view_mismatch', 'poorly_framed',
   'ai_verdict', 'ai_changes',
 ];
 
@@ -143,16 +148,48 @@ export async function fetchShotImage(baseUrl, shotId) {
 }
 
 /**
- * Score this round's photographs against the originals as they stand now.
+ * The matched features, drawn across both photographs.
  *
- * Manager-only: action_recompute_match raises AccessError for anybody else, so
- * the refusal is the server's and this needs no permission check of its own.
- * Wanted after an original is replaced, or the thresholds are tuned.
+ * Through the ORM rather than the controller route the web uses, because
+ * the app's session cookie is attached by hand on native and is a forbidden
+ * header on web - so an <Image> pointed at a url would be unauthenticated on
+ * one platform or the other. Same door every other server picture comes
+ * through, and the same reason.
+ *
+ * `everything` draws every match rather than the strongest few. The button
+ * claims a number, so the picture has to be able to back it.
+ */
+export async function fetchMatchProof(baseUrl, shotId, everything = false) {
+  const png = await rpc(baseUrl, '/web/dataset/call_kw', {
+    model: 'cleaning.recording.shot',
+    method: 'action_match_proof',
+    args: [[Number(shotId)]],
+    kwargs: { everything: !!everything },
+  });
+  return png || null;
+}
+
+/**
+ * Score this round's photographs against the originals as they stand now,
+ * and report what moved since the last time.
+ *
+ * Manager-only: the server raises AccessError for anybody else, so the
+ * refusal is its own and this needs no permission check here.
+ *
+ * recompute_match_summary rather than action_recompute_match: the latter
+ * answers with a dialog for the web, which is no use here, and its sentences
+ * are in the language of the Odoo account rather than the one chosen in the
+ * app. This returns the facts - which views moved, from what to what - and
+ * the wording is the app's own, as it already is for every verdict.
+ *
+ * Shape: { changed, unchanged, views: [{ name, was_level, now_level,
+ * was_score, now_score, was_similar, now_similar }] }, where a score is
+ * `false` rather than 0 on a side that was never measured.
  */
 export const recomputeMatch = (baseUrl, recordingId) =>
   rpc(baseUrl, '/web/dataset/call_kw', {
     model: 'cleaning.recording',
-    method: 'action_recompute_match',
+    method: 'recompute_match_summary',
     args: [[Number(recordingId)]],
     kwargs: {},
   });

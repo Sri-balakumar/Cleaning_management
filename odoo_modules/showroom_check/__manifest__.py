@@ -1,6 +1,6 @@
 {
     'name': 'Showroom Check',
-    'version': '19.0.3.0.0',
+    'version': '19.0.3.5.0',
     'category': 'Operations',
     'summary': 'Scheduled photo check that a showroom matches its agreed layout',
     'description': """
@@ -53,6 +53,7 @@ detects this and explains it. See ``doc/README.md`` for the reverse-proxy setup.
         'views/cleaning_slot_views.xml',
         'views/cleaning_recording_views.xml',
         'views/cleaning_comparison_views.xml',
+        'views/cleaning_compare_result_views.xml',
         'views/cleaning_slot_missed_views.xml',
         'views/cleaning_ai_views.xml',
         # Deliberately NO res.config.settings extension. Inheriting the shared

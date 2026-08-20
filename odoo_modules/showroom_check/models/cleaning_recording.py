@@ -193,22 +193,40 @@ class CleaningRecording(models.Model):
             recording.shot_size = sum(recording.shot_ids.mapped('file_size'))
 
     @api.depends('shot_ids.match_score', 'shot_ids.matched_at',
-                 'shot_ids.name')
+                 'shot_ids.score_approximate', 'shot_ids.name')
     def _compute_match(self):
+        """The round's figure, from the views that were actually measured.
+
+        Approximate scores are left out on purpose. They are real numbers
+        about pixels that do not correspond, and the round takes its score
+        from the WORST view - so a single unlined-up photograph would drag
+        the whole round to zero and raise a red ribbon over a room nobody
+        has any evidence about.
+
+        A round where nothing could be lined up therefore reads as not
+        compared, which is the truth about it.
+        """
         for recording in self:
-            scored = recording.shot_ids.filtered('matched_at')
+            # Compared At comes from every photograph that was looked at,
+            # including the ones that could not be lined up. It answers
+            # "when did this last run", and leaving it blank on a round
+            # compared a minute ago reads as a feature that never fired.
+            attempted = recording.shot_ids.filtered("matched_at")
+            recording.matched_at = (
+                max(attempted.mapped("matched_at")) if attempted else False)
+
+            scored = attempted.filtered(
+                lambda shot: not shot.score_approximate)
             if not scored:
                 recording.match_score = 0
                 recording.match_score_avg = 0
                 recording.match_worst_label = False
-                recording.matched_at = False
                 continue
             scores = scored.mapped('match_score')
             worst = min(scored, key=lambda shot: shot.match_score)
             recording.match_score = worst.match_score
             recording.match_score_avg = int(round(sum(scores) / float(len(scores))))
             recording.match_worst_label = worst.name
-            recording.matched_at = max(scored.mapped('matched_at'))
 
     @api.depends('match_score', 'matched_at',
                  'config_id.match_warn_threshold',
@@ -222,6 +240,12 @@ class CleaningRecording(models.Model):
             alert = config.match_alert_threshold or 50
             if not recording.matched_at:
                 recording.match_level = 'unknown'
+            elif not recording.match_worst_label:
+                # Looked at, and not one view could be lined up. match_score is
+                # 0 here because there was nothing to average, and banding that
+                # as alert would put a red ribbon over a round nobody has any
+                # evidence about.
+                recording.match_level = 'unaligned'
             elif recording.match_score < alert:
                 recording.match_level = 'alert'
             elif recording.match_score < warn:
@@ -248,11 +272,19 @@ class CleaningRecording(models.Model):
         for config in self.env['cleaning.config'].sudo().search([]):
             warn = config.match_warn_threshold or 60
             alert = config.match_alert_threshold or 50
+            # match_worst_label is only set where at least one view was
+            # actually measured, so it is the stored stand-in for 'this round
+            # has a real score' - and its absence is the unaligned band.
             bands = {
-                'ok': [('match_score', '>=', warn), ('matched_at', '!=', False)],
+                'ok': [('match_score', '>=', warn), ('matched_at', '!=', False),
+                       ('match_worst_label', '!=', False)],
                 'warn': [('match_score', '>=', alert), ('match_score', '<', warn),
-                         ('matched_at', '!=', False)],
-                'alert': [('match_score', '<', alert), ('matched_at', '!=', False)],
+                         ('matched_at', '!=', False),
+                         ('match_worst_label', '!=', False)],
+                'alert': [('match_score', '<', alert), ('matched_at', '!=', False),
+                          ('match_worst_label', '!=', False)],
+                'unaligned': [('matched_at', '!=', False),
+                              ('match_worst_label', '=', False)],
                 'unknown': [('matched_at', '=', False)],
             }
             for band in wanted:
@@ -466,7 +498,7 @@ class CleaningRecording(models.Model):
                 'name': reference.name,
                 'sequence': DIRECTION_SEQUENCE.get(direction, 50),
                 'reference_image_id': reference.id,
-                'reference_write_date': reference.write_date,
+                'reference_write_date': reference.image_write_date,
             })
             shot._attach_image(blob, filename, mimetype)
             stored |= shot
@@ -477,18 +509,152 @@ class CleaningRecording(models.Model):
         self.modified(['shot_ids'])
         return stored
 
+    def _recompute_and_summarise(self):
+        """Re-score, and say what moved since the last time.
+
+        Returns the FACTS - which views moved, from what to what - and no
+        sentences at all. The web builds its prose from these in the server
+        language; the app builds its own from the same rows in the language
+        the phone is set to.
+
+        That split is not fussiness. The app already translates every verdict
+        itself rather than reading labels off the server, because a server
+        label answers in the language of the Odoo account and not the one the
+        person chose in the app. A sentence built here would arrive in the
+        wrong language on half the phones that asked for it.
+
+        Against the PREVIOUS RESULT, not against nothing. The question a
+        person is asking when they press the button is whether what they just
+        did made a difference - replacing an original, moving a threshold -
+        and that can only be answered by remembering what it said before.
+        """
+        shots = self.mapped('shot_ids')
+        levels = dict(shots._fields['match_level'].selection)
+
+        def snapshot():
+            return {
+                shot.id: (shot.match_level, shot.match_score, shot.similarity,
+                          shot.registered, shot.match_error or False)
+                for shot in shots
+            }
+
+        before = snapshot()
+        shots._run_match_comparison()
+        # match_level and the advisories are computed and unstored, so without
+        # this the "after" read hands back the cached "before" and every run
+        # reports that nothing changed.
+        shots.invalidate_recordset()
+        after = snapshot()
+
+        moved = []
+        unchanged = 0
+        for shot in shots:
+            was, now = before.get(shot.id), after.get(shot.id)
+            if was == now:
+                unchanged += 1
+                continue
+            was_level, was_score, was_similar, was_reg, _was_err = was
+            now_level, now_score, now_similar, now_reg, _now_err = now
+            moved.append({
+                'name': shot.name or shot.direction,
+                'was_level': was_level,
+                'now_level': now_level,
+                # False, not 0, where there was no score on that side - the
+                # difference between "it scored nothing" and "it was never
+                # measured" is the whole reason the score is hidden at all.
+                'was_score': was_score if was_reg else False,
+                'now_score': now_score if now_reg else False,
+                'was_similar': was_similar,
+                'now_similar': now_similar,
+            })
+
+        return {
+            'changed': bool(moved),
+            'views': moved,
+            'unchanged': unchanged,
+            # Only the web uses these; the app has its own dictionary.
+            'labels': levels,
+        }
+
+    def recompute_match_summary(self):
+        """The same work as the button, answered as data rather than a dialog.
+
+        For the app, which cannot open an ir.actions.act_window and would not
+        want the server language if it could. Public because call_kw refuses
+        anything beginning with an underscore.
+        """
+        self.ensure_one()
+        if not self.env.user.has_group(
+                'showroom_check.group_cleaning_manager'):
+            raise AccessError(self.env._(
+                "Only a Showroom Check Manager can re-run a comparison."))
+        result = self._recompute_and_summarise()
+        # The labels are the server language, so they are no use to a phone
+        # that asked for another one. It has its own.
+        result.pop('labels', None)
+        return result
+
     def action_recompute_match(self):
         """Re-score the photographs against the originals as they stand now.
 
         Wanted after the comparison is tuned, or after an original is replaced.
         Cheap, because the originals carry their prepared values already.
+
+        Answers in a dialog rather than silently. It used to return True, so a
+        press that changed every verdict and a press that changed nothing were
+        indistinguishable - which read as a button that did not work.
         """
         if not self.env.user.has_group(
                 'showroom_check.group_cleaning_manager'):
             raise AccessError(self.env._(
                 "Only a Showroom Check Manager can re-run a comparison."))
-        self.mapped('shot_ids')._run_match_comparison()
-        return True
+
+        result = self._recompute_and_summarise()
+
+        if not result['changed']:
+            summary = self.env._(
+                "Nothing changed. Every view scored exactly as it did "
+                "before.\n\n"
+                "The photographs of a round cannot change once they are "
+                "taken, so only a replaced original or a moved threshold "
+                "will move these numbers.")
+        else:
+            labels = result['labels']
+            lines = []
+            for view in result['views']:
+                parts = ["%s: %s -> %s" % (
+                    view["name"],
+                    labels.get(view["was_level"], view["was_level"]),
+                    labels.get(view["now_level"], view["now_level"]))]
+                if view["was_score"] is not False or view["now_score"] is not False:
+                    parts.append("Match %s -> %s" % (
+                        ("%d%%" % view["was_score"]) if view["was_score"] is not False
+                        else self.env._("none"),
+                        ("%d%%" % view["now_score"]) if view["now_score"] is not False
+                        else self.env._("none")))
+                if view["was_similar"] != view["now_similar"]:
+                    parts.append("Similar %d%% -> %d%%" % (
+                        view["was_similar"], view["now_similar"]))
+                lines.append("  \u00b7  ".join(parts))
+            summary = "\n".join(lines)
+            if result['unchanged']:
+                summary += self.env._(
+                    "\n\nThe other %s views are unchanged.",
+                ) % result['unchanged']
+
+        wizard = self.env['cleaning.compare.result'].create({
+            'recording_id': self.id,
+            'changed': result['changed'],
+            'summary': summary,
+        })
+        return {
+            'type': 'ir.actions.act_window',
+            'name': self.env._('Compared Again'),
+            'res_model': 'cleaning.compare.result',
+            'res_id': wizard.id,
+            'view_mode': 'form',
+            'target': 'new',
+        }
 
     def _gc_recordings(self):
         """Apply each company's retention setting.

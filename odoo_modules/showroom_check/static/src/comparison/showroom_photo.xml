@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<templates xml:space="preserve">
+
+    <t t-name="showroom_check.ShowroomPhoto">
+        <img t-att-src="url"
+             t-att-alt="label"
+             class="cm-shot-img"
+             role="button"
+             tabindex="0"
+             title="Click to see it full size"
+             t-on-click.stop="() => this.open()"/>
+    </t>
+
+    <t t-name="showroom_check.PhotoDialog">
+        <Dialog size="'xl'" title="props.title" contentClass="'cm-photo-dialog'">
+            <img t-att-src="props.url" t-att-alt="props.title" class="cm-photo-full"/>
+        </Dialog>
+    </t>
+
+</templates>

@@ -18,10 +18,15 @@ import { colors, spacing, typography } from '../theme';
  * attached by hand on native and is a forbidden header on web, so an <Image>
  * pointed at /web/image would be unauthenticated on one platform or the other.
  *
+ * `mime` because not everything shown here is a photograph: the drawing of
+ * matched features is a PNG. Most platforms sniff the bytes and would cope
+ * with being told the wrong type, which is exactly why getting it wrong is
+ * the kind of bug that surfaces on one device a year later.
+ *
  * Tap anywhere to close, as well as the button. A picture filling the screen
  * with one small control in the corner invites a tap somewhere in the middle.
  */
-export function ImageViewer({ visible, base64, title, onClose }) {
+export function ImageViewer({ visible, base64, title, onClose, mime = 'image/jpeg' }) {
   const insets = useSafeAreaInsets();
   const { t, rtlText } = useT();
 
@@ -30,7 +35,7 @@ export function ImageViewer({ visible, base64, title, onClose }) {
       <Pressable style={styles.screen} onPress={onClose} accessibilityRole="button">
         {base64 ? (
           <Image
-            source={{ uri: `data:image/jpeg;base64,${base64}` }}
+            source={{ uri: `data:${mime};base64,${base64}` }}
             style={styles.image}
             resizeMode="contain"
           />

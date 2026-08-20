@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { ActivityIndicator, Image, Pressable, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 
-import { fetchShotImage } from '../api/cleaning';
+import { fetchMatchProof, fetchShotImage } from '../api/cleaning';
 import { fetchReferenceImageData } from '../api/config';
 import { ImageViewer } from './ImageViewer';
 import { useT } from '../i18n/LanguageProvider';
@@ -26,10 +26,29 @@ const BANDS = {
   warn: { key: 'matchWarn', color: colors.warning, bg: colors.warningBg, border: colors.warningBorder },
   alert: { key: 'matchAlert', color: colors.danger, bg: colors.dangerBg, border: colors.dangerBorder },
   unknown: { key: 'matchUnknown', color: colors.textMuted, bg: colors.surfaceAlt, border: colors.border },
+  // Compared, and the answer was that it could not be answered. Muted like
+  // unknown, because it is no verdict on the room - but a band of its own,
+  // because "Not compared" is untrue of a comparison that ran.
+  unaligned: { key: 'matchUnaligned', color: colors.textMuted, bg: colors.surfaceAlt, border: colors.border },
 };
 
 export function RoundPhotos({ baseUrl, shots }) {
+  const { t } = useT();
   const [viewing, setViewing] = useState(null);
+
+  // Fetched on demand rather than with the round. It is looked at when a
+  // number is doubted, which is rarely, and it is a bigger picture than
+  // either photograph.
+  const openProof = (shot) => {
+    setViewing({ name: t.matchProofTitle, image: null, mime: "image/png" });
+    fetchMatchProof(baseUrl, shot.id)
+      .then((png) => png && setViewing({
+        name: t.matchProofTitle, image: png, mime: "image/png",
+      }))
+      // A drawing that will not load costs the drawing, not the verdict it
+      // was going to explain.
+      .catch(() => setViewing(null));
+  };
 
   return (
     <>
@@ -40,6 +59,7 @@ export function RoundPhotos({ baseUrl, shots }) {
           shot={shot}
           last={index === shots.length - 1}
           onOpen={setViewing}
+          onProof={openProof}
         />
       ))}
 
@@ -47,13 +67,14 @@ export function RoundPhotos({ baseUrl, shots }) {
         visible={!!viewing}
         base64={viewing?.image}
         title={viewing?.name}
+        mime={viewing?.mime}
         onClose={() => setViewing(null)}
       />
     </>
   );
 }
 
-function ShotRow({ baseUrl, shot, last, onOpen }) {
+function ShotRow({ baseUrl, shot, last, onOpen, onProof }) {
   const { t, rtlRow, rtlText } = useT();
   const [image, setImage] = useState(null);
   const [original, setOriginal] = useState(null);
@@ -113,14 +134,46 @@ function ShotRow({ baseUrl, shot, last, onOpen }) {
       </View>
 
       <View style={[styles.scoreRow, rtlRow]}>
-        {/* Only where there is a real one. An unscored photograph showing "0"
-            would read as the worst possible result rather than as no result. */}
-        {shot.matched_at ? (
+        {/* Two different questions. Similar is how much of the same thing is
+            in both pictures and can always be answered; Match is whether
+            anything moved, and only means something once the two were lined
+            up. So Match is shown when they were - or on a server with no
+            feature matching, where the tile score is the only answer there
+            is and withholding it would leave the card blank. */}
+        {shot.same_view ? (
+          <Text style={[styles.similar, rtlText]}>
+            {`${t.similarLabel}: ${shot.similarity}%`}
+          </Text>
+        ) : null}
+
+        {shot.same_view && shot.match_count ? (
+          <Pressable
+            onPress={() => onProof(shot)}
+            hitSlop={8}
+            accessibilityRole="button"
+            style={styles.proofBtn}
+          >
+            <Ionicons name="search" size={12} color={colors.primary} />
+            <Text style={styles.proofText}>
+              {`${shot.match_count} ${t.matchingFeatures}`}
+            </Text>
+          </Pressable>
+        ) : null}
+
+        {shot.registered || (!shot.same_view && shot.matched_at) ? (
           <Text style={[styles.score, { color: band.color }]}>
-            {`${t.matchLabelShort} ${shot.match_score}%`}
+            {`${t.matchLabelShort}: ${shot.match_score}%`}
           </Text>
         ) : null}
       </View>
+
+      {/* Why the number is missing, or why it wants reading carefully. The
+          same two sentences the web shows, for the same two states. */}
+      {shot.poorly_framed ? (
+        <Text style={[styles.note, styles.noteWarn, rtlText]}>{t.poorlyFramedNote}</Text>
+      ) : shot.view_mismatch ? (
+        <Text style={[styles.note, styles.noteWarn, rtlText]}>{t.notSameViewNote}</Text>
+      ) : null}
 
       {/* What changed, in words - the one thing no measurement produces. Or why
           it could not be compared, which matters just as much. */}
@@ -189,6 +242,20 @@ const styles = StyleSheet.create({
   paneImage: { width: '100%', height: '100%' },
 
   scoreRow: { flexDirection: 'row', alignItems: 'center' },
+  similar: { ...typography.caption, fontWeight: "700" },
+  proofBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingVertical: 2,
+    paddingHorizontal: spacing.sm,
+    borderRadius: radius.pill,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surfaceAlt,
+  },
+  proofText: { fontSize: 11, fontWeight: '700', color: colors.primary },
+  noteWarn: { color: colors.warning },
   score: { fontSize: 15, fontWeight: '700' },
   note: { ...typography.caption, lineHeight: 18 },
   noteError: { color: colors.danger },

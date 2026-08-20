@@ -18,6 +18,8 @@ import {
 import { fetchAiConfig } from '../../src/api/config';
 import { useAuth } from '../../src/auth/AuthContext';
 import { RequireAuth } from '../../src/auth/RequireAuth';
+import { bandKey } from '../../src/cleaning/matchBands';
+import { useDialog } from '../../src/components/AppDialog';
 import { ErrorBanner } from '../../src/components/ErrorBanner';
 import { PrimaryButton } from '../../src/components/PrimaryButton';
 import { GradientBackground, GradientOrbs } from '../../src/components/GradientBackground';
@@ -153,6 +155,61 @@ function RecordingScreen() {
    * there is no permission check here - the refusal arrives as the server's own
    * message, which is better wording than anything invented locally.
    */
+  const { confirm } = useDialog();
+
+  /**
+   * What "Compare again" found, in the words of whoever is holding the phone.
+   *
+   * The server sends the facts and no sentences: which views moved, and from
+   * what to what. Wording them here is the same rule the photographs card
+   * already follows - a label from the server arrives in the language of the
+   * Odoo account rather than the one chosen in the app.
+   */
+  const describeChange = useCallback(
+    (view) => {
+      const level = (key) => t[bandKey(key)];
+      const parts = [`${level(view.was_level)} \u2192 ${level(view.now_level)}`];
+      // false, not 0, on a side that was never measured - so "none" rather
+      // than a nought that reads as the worst possible result.
+      if (view.was_score !== false || view.now_score !== false) {
+        const score = (v) => (v === false ? t.matchNone : `${v}%`);
+        parts.push(`${t.matchLabelShort} ${score(view.was_score)} \u2192 ${score(view.now_score)}`);
+      }
+      if (view.was_similar !== view.now_similar) {
+        parts.push(`${t.similarLabel} ${view.was_similar}% \u2192 ${view.now_similar}%`);
+      }
+      return `${view.name}\n   ${parts.join('  \u00b7  ')}`;
+    },
+    [t],
+  );
+
+  const compareAgain = useCallback(async () => {
+    setBusy('match');
+    setError(null);
+    setNotice(null);
+    try {
+      const result = await recomputeMatch(connection.baseUrl, id);
+      await load();
+      const views = (result && result.views) || [];
+      const message = views.length
+        ? views.map(describeChange).join('\n\n')
+            + (result.unchanged
+              ? `\n\n${t.otherViewsUnchanged.replace('%s', result.unchanged)}`
+              : '')
+        : t.nothingChangedBody;
+      confirm({
+        title: views.length ? t.viewsChanged : t.nothingChanged,
+        message,
+        icon: views.length ? 'refresh-outline' : 'checkmark-circle-outline',
+        actions: [{ label: t.close, style: 'cancel' }],
+      });
+    } catch (e) {
+      setError(translateError(t, AppError.from(e)));
+    } finally {
+      setBusy(null);
+    }
+  }, [confirm, connection, describeChange, id, load, t]);
+
   const run = useCallback(
     async (which, work, done) => {
       setBusy(which);
@@ -244,9 +301,7 @@ function RecordingScreen() {
                     variant="ghost"
                     loading={busy === 'match'}
                     disabled={!!busy}
-                    onPress={() =>
-                      run('match', () => recomputeMatch(connection.baseUrl, id), t.comparedAgain)
-                    }
+                    onPress={compareAgain}
                     style={styles.action}
                   />
                 ) : null}

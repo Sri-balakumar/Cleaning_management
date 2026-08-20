@@ -22,6 +22,19 @@
     object-fit: cover;
     border-radius: .5rem;
     background: #F8FAFC;
+    cursor: zoom-in;
+}
+
+// Full size, and contained rather than cropped: this is the one place the
+// whole picture matters, so nothing may be cut off the edges of it.
+.cm-photo-dialog {
+    .cm-photo-full {
+        display: block;
+        max-width: 100%;
+        max-height: 75vh;
+        margin: 0 auto;
+        object-fit: contain;
+    }
 }
 
 // The verdict, in the four bands the server computes. `unknown` is styled here
@@ -68,6 +81,75 @@
     &.cm-score-warn { color: #D97706; }
     &.cm-score-alert { color: #DC2626; }
     &.cm-score-unknown { color: #94A3B8; }
+
+    &.cm-score-unaligned { color: #94A3B8; }
+}
+
+// How alike the two pictures are, which is not how well they match. Set
+// in plain text rather than a band colour: it is context for the verdict,
+// never a verdict itself.
+.cm-similar-row {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: .5rem;
+}
+
+.cm-similar {
+    font-size: .875rem;
+    font-weight: 600;
+    opacity: .75;
+}
+
+// The evidence, deliberately quieter than the figure it supports. It is there
+// for the person who doubts the number, not for everybody else.
+.cm-proof-btn {
+    --bs-btn-padding-y: .0625rem;
+    --bs-btn-padding-x: .5rem;
+    font-size: .75rem;
+}
+
+.cm-proof-dialog {
+    .cm-proof-image {
+        display: block;
+        width: 100%;
+        height: auto;
+        border-radius: .5rem;
+        background: #0F172A;
+    }
+
+    .cm-proof-lead {
+        font-size: .9375rem;
+        margin-bottom: .75rem;
+    }
+
+    .cm-proof-note {
+        font-size: .8125rem;
+        opacity: .7;
+        margin: .75rem 0 0;
+    }
+
+    // The two colours the drawing uses, named where they are read. Matched to
+    // the BGR the drawing paints: green agrees, amber does not.
+    .cm-proof-key {
+        font-size: .8125rem;
+        opacity: .85;
+        margin-bottom: .5rem;
+    }
+
+    .cm-key-agree {
+        color: rgb(120, 220, 120);
+        font-weight: 900;
+    }
+
+    .cm-key-stray {
+        color: rgb(245, 170, 60);
+        font-weight: 900;
+    }
+}
+
+.cm-use-original {
+    font-size: .8125rem;
 }
 
 .cm-shot-note {

@@ -64,7 +64,19 @@ class CleaningReferenceImage(models.Model):
     # decodes the four photographs that just arrived - never the four it is
     # comparing them against.
     signature = fields.Char(readonly=True, copy=False)
+    # The same grid taken in the letterboxed square, which is where a
+    # registered comparison lands. Kept beside the stretched one rather
+    # than replacing it: the stretched grid is what runs without OpenCV.
+    signature_padded = fields.Char(readonly=True, copy=False)
     phash = fields.Char(readonly=True, copy=False)
+    # ORB keypoints and descriptors, for telling whether a round even
+    # photographed this view. Empty wherever OpenCV is not installed, which
+    # is not an error - the tile comparison carries on without it.
+    features = fields.Text(readonly=True, copy=False)
+    # When the PICTURE last changed, which is not when the row last
+    # changed. Renaming the view, editing what to look for, or a migration
+    # adding a column all write the row and leave the photograph alone.
+    image_write_date = fields.Datetime(readonly=True, copy=False)
 
     _uniq_direction = models.Constraint(
         'UNIQUE (config_id, direction)',
@@ -129,9 +141,12 @@ class CleaningReferenceImage(models.Model):
             _logger.warning(
                 "Showroom Check: could not resize an original; storing it as "
                 "it arrived", exc_info=True)
-        signature, phash = compare.signature_for(raw)
+        signature, phash, features, padded = compare.signature_for(raw)
         vals['signature'] = signature or False
+        vals['signature_padded'] = padded or False
         vals['phash'] = ('%016x' % phash) if phash is not None else False
+        vals['features'] = features or False
+        vals['image_write_date'] = fields.Datetime.now()
 
     @api.model_create_multi
     def create(self, vals_list):

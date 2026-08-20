@@ -5,6 +5,7 @@ from odoo import fields, http
 from odoo.exceptions import AccessError, UserError, ValidationError
 from odoo.http import request
 
+from ..models import cleaning_image_compare as compare
 from ..models.cleaning_config import (
     DIRECTION_KEYS, MIN_PHOTO_BYTES, MIN_UPLOAD_BYTES,
 )
@@ -385,6 +386,38 @@ class CleaningManagementController(http.Controller):
             # footage that is access-controlled.
             immutable=True,
         )
+
+    @http.route('/showroom_check/match_proof/<int:shot_id>', type='http',
+                auth='user', methods=['GET'])
+    def match_proof(self, shot_id, **kwargs):
+        """The matched features drawn across both photographs.
+
+        Not sudo(), like the two routes below it: the record rules on the
+        photograph decide who may look at it, and the proof of a comparison
+        is no more public than the pictures it is drawn on.
+
+        Computed per request rather than stored. It is looked at when
+        somebody doubts a number, which is rarely, and keeping a second
+        image against every photograph ever taken to save that would be a
+        poor trade.
+        """
+        shot = request.env['cleaning.recording.shot'].browse(shot_id)
+        if not shot.exists() or not shot.image:
+            return request.not_found()
+        reference = shot.reference_image_id
+        if not reference or not reference.image:
+            return request.not_found()
+
+        drawing = compare.match_drawing(
+            reference._raw_image(), shot._raw_image(),
+            everything=kwargs.get('all') in ('1', 'true', 'True'))
+        if not drawing:
+            return request.not_found()
+        return request.make_response(drawing, headers=[
+            ('Content-Type', 'image/png'),
+            ('Content-Length', str(len(drawing))),
+            ('Cache-Control', 'no-store'),
+        ])
 
     @http.route('/showroom_check/photo/<int:shot_id>', type='http',
                 auth='user', methods=['GET'])

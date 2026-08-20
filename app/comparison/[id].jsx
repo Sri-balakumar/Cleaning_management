@@ -15,6 +15,7 @@ import { RoundPhotos } from '../../src/components/RoundPhotos';
 import { formatDay, formatMoment } from '../../src/cleaning/dates';
 import { translateError, useT } from '../../src/i18n/LanguageProvider';
 import { colors, radius, spacing, typography } from '../../src/theme';
+import { isScored } from '../../src/cleaning/matchBands';
 
 const relationName = (v) => (Array.isArray(v) ? v[1] : undefined);
 
@@ -68,7 +69,7 @@ function ComparisonScreen() {
   }, [connection, id, t]);
 
   const close = useCallback(() => router.back(), [router]);
-  const scored = record?.matched_at && record?.match_level !== 'unknown';
+  const scored = record?.matched_at && isScored(record?.match_level);
 
   return (
     <View style={styles.screen}>
@@ -104,7 +105,7 @@ function ComparisonScreen() {
             <View style={styles.summary}>
               <Text style={[styles.summaryText, rtlText]}>
                 {[
-                  scored ? `${t.matchLabelShort} ${record.match_score}%` : t.matchUnknown,
+                  scored ? `${t.matchLabelShort}: ${record.match_score}%` : t.matchUnknown,
                   record.match_worst_label ? `${t.worstView}: ${record.match_worst_label}` : null,
                   record.matched_at ? formatMoment(record.matched_at) : null,
                 ]

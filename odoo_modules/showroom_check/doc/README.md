@@ -73,6 +73,24 @@ server's address ever changes. Use it to try the module out, not to run it.
 
 1. **Install the module.** Apps → search for *Showroom Check* → Install.
 
+   **Optional, and worth it:** install OpenCV into the same Python the
+   server runs on, before or after the module —
+
+   ```
+   "C:\Program Files\Odoo 19.0.20260119\python\python.exe" -m pip install opencv-python-headless
+   ```
+
+   Without it, a round is compared against its original by brightness over
+   a fixed grid, which only works where the two were photographed from
+   much the same spot. With it, the server also matches features, so it can
+   tell whether a round photographed *the same view at all* — across a
+   different phone, a different distance and a different angle — and says
+   so when it did not.
+
+   The module installs and runs either way; nothing fails without it. Redo
+   this after an Odoo upgrade, which replaces the interpreter, and re-save
+   one original afterwards so the descriptors are rebuilt.
+
 2. **Give people access.** Settings → Users → pick a person → under
    **Showroom Check** choose:
    - **User** — can open the dashboard and record.

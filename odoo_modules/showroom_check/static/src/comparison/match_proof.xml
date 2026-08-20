@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<templates xml:space="preserve">
+
+    <t t-name="showroom_check.MatchProof">
+        <button type="button" class="btn btn-sm btn-outline-secondary cm-proof-btn"
+                title="See the matching features drawn across both photographs"
+                t-on-click.stop="() => this.open()">
+            <i class="fa fa-search-plus me-1"/><t t-esc="matches"/> matching features
+        </button>
+    </t>
+
+    <t t-name="showroom_check.MatchProofDialog">
+        <Dialog size="'xl'" title="props.title" contentClass="'cm-proof-dialog'">
+            <p class="cm-proof-lead">
+                <strong><t t-esc="props.matches"/></strong> small patches of the
+                original were found again in today's photograph. Each line joins
+                one to its partner. This is what the similarity figure is counted
+                from - the same two pictures always give the same number.
+            </p>
+
+            <p class="cm-proof-key">
+                <span class="cm-key-agree">━</span> agrees with the others, so the
+                two pictures line up here.
+                <span class="cm-key-stray ms-3">━</span> disagrees - a patch that
+                found a partner somewhere it should not have. Many of these mean
+                the pair cannot be lined up at all.
+            </p>
+
+            <img t-att-src="url" class="cm-proof-image"
+                 alt="Matching features drawn across both photographs"/>
+
+            <p class="cm-proof-note">
+                The original is on the right, today's photograph on the left, both
+                as the comparison sees them: upright, grey, letterboxed square.
+                <t t-if="!state.everything and props.matches > limit">
+                    Showing the <t t-esc="limit"/> strongest of
+                    <t t-esc="props.matches"/>, so the lines stay countable.
+                    <a href="#" class="ms-1"
+                       t-on-click.prevent="() => this.showEverything()">Show all
+                       <t t-esc="props.matches"/></a>
+                </t>
+                <t t-else="">Showing every one.</t>
+            </p>
+        </Dialog>
+    </t>
+
+</templates>

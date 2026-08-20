@@ -13,6 +13,7 @@ import { GradientBackground, GradientOrbs } from '../../src/components/GradientB
 import { formatGroupDate, formatTime } from '../../src/cleaning/dates';
 import { translateError, useT } from '../../src/i18n/LanguageProvider';
 import { colors, radius, spacing, typography } from '../../src/theme';
+import { bandKey, isScored } from '../../src/cleaning/matchBands';
 import { log } from '../../src/utils/log';
 
 const relationName = (value) => (Array.isArray(value) ? value[1] : '');
@@ -22,14 +23,12 @@ const BAND_COLOR = {
   alert: colors.danger,
   warn: colors.warning,
   unknown: colors.textMuted,
+  unaligned: colors.textMuted,
   ok: colors.success,
 };
-const BAND_KEY = {
-  alert: 'matchAlert',
-  warn: 'matchWarn',
-  unknown: 'matchUnknown',
-  ok: 'matchOk',
-};
+// Which bands exist, and which carry a number, come from one module now -
+// three screens used to keep their own copies and two of them missed the
+// day a fifth band appeared.
 
 /**
  * Rows arrive ordered `slot_date desc, id desc`, so one pass produces the days
@@ -206,12 +205,13 @@ function DayGroup({ group, open, onToggle, onOpen, t, rtlRow, rtlText }) {
                     {/* Only where there is a real score. An unscored round
                         showing 0% would read as the worst possible result
                         rather than as no result. */}
-                    {item.matched_at !== false && item.match_level !== 'unknown' ? (
+                    {item.matched_at !== false
+                      && isScored(item.match_level) ? (
                       <Text style={[styles.rowScore, { color: band }]}>{`${item.match_score}%`}</Text>
                     ) : null}
                     <View style={[styles.dot, { backgroundColor: band }]} />
                     <Text style={[styles.rowVerdict, { color: band }]} numberOfLines={1}>
-                      {t[BAND_KEY[item.match_level] || 'matchUnknown']}
+                      {t[bandKey(item.match_level)]}
                     </Text>
                   </View>
                 </View>

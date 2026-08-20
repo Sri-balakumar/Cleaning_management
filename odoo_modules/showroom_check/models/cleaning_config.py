@@ -167,8 +167,27 @@ MATCH_LEVELS = [
     ('ok', 'As expected'),
     ('warn', 'Worth a look'),
     ('alert', 'Something has changed'),
+    # Compared, and the answer was that it could not be answered. Its own
+    # band because 'Not compared' is untrue of it and reads as a fault: the
+    # comparison ran, found the same view, and could not line the two up
+    # closely enough for the score to mean anything.
+    ('unaligned', 'Could not line up'),
     ('unknown', 'Not compared'),
 ]
+
+# The dHash distance, out of 64, past which two pictures are probably not of
+# the same view at all rather than the same view with something moved.
+#
+# Identical pictures are 0. The same room from the same spot hours apart lands
+# in the low teens. Pure chance is 32. The pair that prompted this - an
+# original framed as a close-up of one corner, against a round photographed
+# from across the room - came in at 29 and 25.
+#
+# 22 is deliberately high. A room that genuinely changed still shares its
+# framing and moves only a handful of bits, so this must not fire on one: the
+# point is to explain a verdict, never to explain one away. Provisional, and
+# worth calibrating against real rounds once the originals are retaken.
+VIEW_MISMATCH_DISTANCE = 22
 
 
 def float_to_time(value):
