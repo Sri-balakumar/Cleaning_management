@@ -64,7 +64,15 @@
           "photosPermission": "369 CleanPro can use a photograph you already have as the original for a view of the showroom."
         }
       ],
-      "@react-native-community/datetimepicker"
+      "@react-native-community/datetimepicker",
+      [
+        "react-native-edge-to-edge",
+        {
+          "android": {
+            "enforceNavigationBarContrast": false
+          }
+        }
+      ]
     ]
   }
 }

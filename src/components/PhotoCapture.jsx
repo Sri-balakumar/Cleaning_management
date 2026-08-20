@@ -6,6 +6,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { PrimaryButton } from './PrimaryButton';
 import { useT } from '../i18n/LanguageProvider';
+import { useNavigationBarStyle } from '../utils/useNavigationBarStyle';
 import { colors, radius, spacing, typography } from '../theme';
 
 /**
@@ -22,6 +23,8 @@ import { colors, radius, spacing, typography } from '../theme';
  */
 export function PhotoCapture({ visible, title, hint, onCapture, onClose }) {
   const insets = useSafeAreaInsets();
+  // Black and full-screen, but only while it is open. See the hook.
+  useNavigationBarStyle('light', visible);
   const { t, rtlText } = useT();
   const [permission, requestPermission] = useCameraPermissions();
   const cameraRef = useRef(null);

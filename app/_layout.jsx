@@ -4,6 +4,7 @@ import { StyleSheet, View } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import * as SplashScreen from 'expo-splash-screen';
+import * as NavigationBar from 'expo-navigation-bar';
 import * as SystemUI from 'expo-system-ui';
 import { AuthProvider, useAuth } from '../src/auth/AuthContext';
 import { DialogProvider } from '../src/components/AppDialog';
@@ -39,6 +40,16 @@ export default function RootLayout() {
   useEffect(() => {
     // Removes the black root-view flash behind the splash fade on Android.
     SystemUI.setBackgroundColorAsync(colors.background).catch(() => {});
+
+    // Dark navigation buttons, because every screen but the camera is a light
+    // one - and the tab bar paints that strip with the app's own pale
+    // background, so light buttons there are invisible. The camera screens ask
+    // for light while they are up and hand it back on the way out; this is the
+    // state they hand it back to, and the state the app starts in rather than
+    // inheriting whatever Android last set.
+    try {
+      NavigationBar.setStyle('dark');
+    } catch {}
   }, []);
 
   return (
@@ -70,6 +81,8 @@ export default function RootLayout() {
             options={{ presentation: 'fullScreenModal', animation: 'slide_from_bottom' }}
           />
           <Stack.Screen name="missed" options={{ animation: 'slide_from_right' }} />
+          <Stack.Screen name="help" options={{ animation: 'slide_from_right' }} />
+          <Stack.Screen name="guide/[id]" options={{ animation: 'slide_from_right' }} />
           <Stack.Screen name="settings/index" options={{ animation: 'slide_from_right' }} />
           <Stack.Screen name="settings/rounds" options={{ animation: 'slide_from_right' }} />
           <Stack.Screen name="settings/ai" options={{ animation: 'slide_from_right' }} />

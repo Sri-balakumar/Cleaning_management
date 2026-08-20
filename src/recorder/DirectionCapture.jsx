@@ -9,7 +9,6 @@ import {
   View,
 } from 'react-native';
 import { CameraView } from 'expo-camera';
-import * as NavigationBar from 'expo-navigation-bar';
 import { Ionicons } from '@expo/vector-icons';
 import { useIsFocused } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -17,8 +16,10 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { fetchReferenceImageData } from '../api/config';
 import { ImageViewer } from '../components/ImageViewer';
 import { PrimaryButton } from '../components/PrimaryButton';
+import { CaptureModeSwitch } from './CaptureModeSwitch';
 import { useTurnSense } from './useTurnSense';
 import { useT } from '../i18n/LanguageProvider';
+import { useNavigationBarStyle } from '../utils/useNavigationBarStyle';
 import { colors, radius, spacing, typography } from '../theme';
 
 /**
@@ -50,6 +51,8 @@ export function DirectionCapture({
   facing,
   onCaptured,
   onCancel,
+  captureKind,
+  onSwitchMode,
 }) {
   const { t, rtlText } = useT();
   const insets = useSafeAreaInsets();
@@ -145,25 +148,10 @@ export function DirectionCapture({
     return () => task.cancel();
   }, [isFocused]);
 
-  // Light navigation buttons while this screen is up.
-  //
-  // Edge-to-edge makes the system bar transparent and draws the app behind it,
-  // so on a black camera screen the dark icons the rest of the app asks for are
-  // invisible. setStyle is the only lever left: colouring the bar itself is
-  // unsupported once edge-to-edge is on.
-  useEffect(() => {
-    if (!isFocused) return undefined;
-    // setStyle returns void, not a promise, and throws outright on a platform
-    // that does not support it - so it is guarded rather than chained.
-    try {
-      NavigationBar.setStyle('light');
-    } catch {}
-    return () => {
-      try {
-        NavigationBar.setStyle('dark');
-      } catch {}
-    };
-  }, [isFocused]);
+  // Light navigation buttons while this black screen is up. The reasoning, and
+  // the guards, live in the hook - which the recorder screen needs too, and
+  // was the reason its buttons went missing on the way in and out of here.
+  useNavigationBarStyle('light');
 
   /** Force a fresh camera. Insurance for a preview that comes up black anyway. */
   const restartCamera = useCallback(() => {
@@ -430,6 +418,19 @@ export function DirectionCapture({
           app behind the system navigation buttons, so without it Retake and
           Use it sit underneath them and get pressed by mistake. */}
       <View style={[styles.controls, { paddingBottom: insets.bottom + spacing.xl }]}>
+        {/* Photos or video, over the camera, the way a phone's own camera app
+            puts it there. Hidden while a shot is being judged: the question
+            then is whether to keep THIS picture, and offering to throw the
+            whole round away beside Retake and Use it is the wrong question in
+            the wrong place. */}
+        {onSwitchMode && !shot ? (
+          <CaptureModeSwitch
+            value={captureKind}
+            onChange={onSwitchMode}
+            disabled={busy}
+            style={styles.modeSwitch}
+          />
+        ) : null}
         {shot ? (
           <View style={styles.review}>
             <PrimaryButton
@@ -565,6 +566,7 @@ const styles = StyleSheet.create({
   markerDone: { backgroundColor: colors.success },
   trackDegrees: { ...typography.caption, color: colors.onGradientMuted, textAlign: 'center' },
 
+  modeSwitch: { marginBottom: spacing.lg },
   controls: { alignItems: 'center', paddingTop: spacing.xl, paddingHorizontal: spacing.xl },
   review: { flexDirection: 'row', gap: spacing.md, alignSelf: 'stretch' },
   reviewBtn: { flex: 1 },
