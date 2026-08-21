@@ -125,10 +125,24 @@
               groups="showroom_check.group_cleaning_manager"
               sequence="10"/>
 
+    <!--
+        Mobile App opens the documents themselves, not a shelf of cards about
+        them.
+
+        There was a card dialog here until the app's manuals started opening
+        straight to the PDF. Once a card is a title and a button that downloads,
+        it is a worse list than the list - it cannot upload, replace, reorder or
+        retire anything, and a manager who came to fix a manual had to leave it
+        again to do so. The list does the reading and the writing in one place.
+
+        The module's own manual keeps its dialog above, because those cards
+        still open a guide worth previewing, and its own upload list is one
+        click further on behind "Manage documents".
+    -->
     <menuitem id="menu_cleaning_help_app"
               name="Mobile App"
               parent="menu_cleaning_help"
-              action="showroom_check.action_help_guide_app"
+              action="showroom_check.action_cleaning_manual_app"
               groups="showroom_check.group_cleaning_manager"
               sequence="20"/>
 

@@ -15,12 +15,22 @@
                         <div class="mb-1" style="font-size:15px;">
                             <span t-esc="doc.icon" class="me-1"/>
                             <b t-esc="doc.name"/>
+                            <!-- Only a manager ever sees a mixed shelf, so this
+                                 only ever appears for them - the same caption
+                                 the phone puts on the same rows. A card with no
+                                 chip is one nothing is held back from. -->
+                            <span t-if="doc.audience === 'manager'"
+                                  class="badge text-bg-secondary ms-2"
+                                  style="font-weight:500;">Managers only</span>
                         </div>
                         <div t-if="doc.description" class="text-muted mb-2" style="font-size:13px;"
                              t-esc="doc.description"/>
+                        <!-- The label names what opens, so nobody is surprised
+                             by a PDF appearing where a page was promised. -->
                         <button class="btn btn-primary btn-sm"
-                                t-on-click="() => this.openGuide(doc.id)">
-                            📖 Open guide
+                                t-on-click="() => this.openDoc(doc)">
+                            <t t-if="opensPdf(doc)">📄 Open PDF</t>
+                            <t t-else="">📖 Open guide</t>
                         </button>
                     </div>
                 </t>

@@ -11,9 +11,15 @@
                 <field name="name"/>
                 <field name="description" optional="show"/>
                 <field name="section"/>
-                <field name="audience" optional="show"/>
+                <!-- A badge rather than plain text: this list is where a mixed
+                     shelf is read, and "who is this for" is the column the eye
+                     needs to land on. -->
+                <field name="audience" widget="badge" optional="show"/>
                 <field name="pdf_filename" string="PDF" optional="show"/>
                 <field name="active" widget="boolean_toggle"/>
+                <!-- "When was this last replaced" is the first question asked of
+                     a library somebody uploads into. -->
+                <field name="write_date" string="Last updated" optional="show"/>
             </list>
         </field>
     </record>
@@ -47,8 +53,15 @@
                         <group string="Where it appears">
                             <field name="section"/>
                             <!-- The module's manual is one shelf everybody
-                                 shares; only app guides are split. -->
-                            <field name="audience" invisible="section != 'app'"/>
+                                 shares; only app guides are split.
+
+                                 A radio rather than a dropdown: who a document
+                                 is for is the decision this form exists to
+                                 capture, and both answers should be visible
+                                 without opening anything. -->
+                            <field name="audience" widget="radio"
+                                   options="{'horizontal': true}"
+                                   invisible="section != 'app'"/>
                         </group>
                     </group>
                     <group string="PDF">
@@ -93,9 +106,15 @@
     </record>
 
     <!--
-        What the two Help menus open: a dialog of cards, one per guide, where
-        "Open guide" leaves for the readable page. Both share one component and
-        differ only by the section in their params.
+        What Help > User Manual opens: a dialog of cards, one per guide, where
+        "Open guide" leaves for the readable page.
+
+        One shelf, not two. The Mobile App entry used the same component until
+        its documents started opening straight to the PDF; a card that is a
+        title and a download button is a worse list than the list, so that menu
+        now opens the documents themselves. The component is still written for
+        either shelf - `section` is a param - so pointing a menu back at it is
+        one record if the app's guides ever want previewing again.
     -->
     <record id="action_help_guide_module" model="ir.actions.client">
         <field name="name">User Manual</field>
@@ -103,16 +122,20 @@
         <field name="params">{'section': 'manual', 'title': 'User Manual'}</field>
     </record>
 
-    <record id="action_help_guide_app" model="ir.actions.client">
-        <field name="name">Mobile App</field>
-        <field name="tag">showroom_check_help_guide</field>
-        <field name="params">{'section': 'app', 'title': 'Mobile App'}</field>
-    </record>
-
     <!--
-        Where the documents are uploaded, reached from "Manage documents" in
-        that dialog. One action per shelf, so the domain keeps the other out of
-        the way and a new document lands on the shelf you were already in.
+        Where the documents are uploaded. One action per shelf, so the domain
+        keeps the other out of the way and a new document lands on the shelf you
+        were already in.
+
+        The app one is Help > Mobile App itself - that shelf is the one people
+        upload to.
+
+        The module one is deliberately not on a menu. Its single document ships
+        with the code and is seeded once (see the noupdate note in
+        cleaning_manual_data.xml), so there is nothing routine to do to it, and a
+        menu entry would invite editing documentation that the next release
+        replaces anyway. Kept as an action so somebody who genuinely needs it can
+        reach it from Settings > Technical > Actions.
     -->
     <record id="action_cleaning_manual_module" model="ir.actions.act_window">
         <field name="name">User Manual</field>
@@ -138,12 +161,19 @@
         <field name="domain">[('section', '=', 'app')]</field>
         <field name="context">{'default_section': 'app'}</field>
         <field name="help" type="html">
-            <p class="o_view_nocontent_smiling_face">Add the app's manual.</p>
+            <p class="o_view_nocontent_smiling_face">Upload the app's manual.</p>
             <p>
-                PDFs explaining how to use the phone app — recording a round,
-                taking the photographs. The app lists these under Help, as
-                <b>Mobile app</b>. Set <b>Shown to</b> to Managers to keep a
-                document off everyone else's phone.
+                The manuals for the phone app — recording a round, taking the
+                photographs. Upload the <b>PDF</b>: it is what opens when
+                somebody picks the document, here and on the phone under
+                <b>Profile &gt; Help</b>. A <b>Guide</b> is optional, and is
+                shown instead for a document with no PDF yet.
+            </p>
+            <p>
+                <b>Shown to</b> decides who sees it. Leave it on <b>Users</b> for
+                the manual everybody gets; set it to <b>Managers</b> for an
+                administrator's manual and it stays off everyone else's phone,
+                while managers see both.
             </p>
         </field>
     </record>

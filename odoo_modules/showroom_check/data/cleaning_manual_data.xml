@@ -1,5 +1,24 @@
 <?xml version="1.0" encoding="utf-8"?>
 <odoo>
+    <!--
+        noupdate: these two seed a fresh install and are then the
+        administrator's to replace.
+
+        They were updatable on purpose once, so upgrading the module would
+        republish a guide that ships with the code. That was a fair trade while
+        nobody could edit them - there was no menu or button anywhere reaching
+        the upload form, so the only writer was the module itself.
+
+        Now that uploading is the point of the Manuals menu, republishing is no
+        longer a feature: an administrator replaces the user manual, and the next
+        upgrade silently puts the shipped one back with nothing said. Losing
+        somebody's document is worse than shipping a guide one version behind,
+        so the records stop moving once they exist.
+
+        To deliberately republish a seeded guide after changing it here, delete
+        the record and upgrade, or edit it in the form.
+    -->
+    <data noupdate="1">
 
     <!--
         The user guide, shipped with the module rather than uploaded per
@@ -22,9 +41,8 @@
         get_guide() falls back to _read_static_file(html_static_path), which
         keeps ninety kilobytes of embedded pictures out of this file.
 
-        Left updatable on purpose. Upgrading the module republishes the guide,
-        which is what should happen to a document that ships with the code -
-        at the cost of overwriting anything edited through the web form.
+        Seeded once, then left alone - see the noupdate note at the top of this
+        file.
     -->
     <record id="manual_app_user_guide" model="cleaning.manual">
         <field name="name">369 Showroom Check - User Guide</field>
@@ -61,4 +79,5 @@
         <field name="pdf_filename">Showroom Check Manual.pdf</field>
     </record>
 
+    </data>
 </odoo>

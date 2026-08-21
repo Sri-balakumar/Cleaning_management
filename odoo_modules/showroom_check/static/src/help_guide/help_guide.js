@@ -8,8 +8,10 @@ import { Dialog } from "@web/core/dialog/dialog";
 /**
  * One shelf of guides, as cards.
  *
- * Which shelf is decided by the action's params, so both menu entries share
- * this one component rather than duplicating it per section.
+ * Only Help > User Manual reaches this now: the app's manuals open their PDF
+ * directly, and a card that is a title and a download button is a worse list
+ * than the list. The shelf is still a param rather than a constant, so pointing
+ * a menu back at the other one is a single record.
  *
  * "Open guide" leaves for a plain page rather than rendering here on purpose:
  * a guide is read at length, sometimes printed, and a dialog is the wrong
@@ -26,22 +28,48 @@ export class HelpGuideDialog extends Component {
 
     setup() {
         this.orm = useService("orm");
+        // Resolved once, and read everywhere else from here. Defaulting in one
+        // place and comparing props.section in another is how the list ends up
+        // querying one shelf while the buttons behave like the other.
+        this.section = this.props.section || "app";
         this.state = useState({ docs: [], loaded: false });
 
         onWillStart(async () => {
-            const section = this.props.section || "app";
+            // `audience` so a mixed shelf can say which card is which. The
+            // phone already captions those rows; without this the backend is
+            // the only place a manager cannot tell the two apart.
             this.state.docs = await this.orm.searchRead(
                 "cleaning.manual",
-                [["section", "=", section], ["active", "=", true]],
-                ["name", "description", "icon"],
+                [["section", "=", this.section], ["active", "=", true]],
+                ["name", "description", "icon", "audience", "pdf_url"],
                 { order: "sequence, id" }
             );
             this.state.loaded = true;
         });
     }
 
-    openGuide(id) {
-        window.open("/showroom_check/help/guide/" + id, "_blank");
+    /** Does this card open the document itself rather than a page about it? */
+    opensPdf(doc) {
+        return this.section === "app" && !!doc.pdf_url;
+    }
+
+    /**
+     * Open a document.
+     *
+     * An app manual goes straight to the PDF: somebody opening one wants the
+     * manual, and a page about it first is a step in front of the thing they
+     * came for. The module's manual keeps its guide page, which is written to
+     * be read rather than to introduce a download.
+     *
+     * Either way a document with no PDF falls through to the guide page - a
+     * guide is often written long before anyone gets round to the document, and
+     * a button that does nothing is worse than one that shows what there is.
+     */
+    openDoc(doc) {
+        window.open(
+            this.opensPdf(doc) ? doc.pdf_url : "/showroom_check/help/guide/" + doc.id,
+            "_blank"
+        );
     }
 }
 
