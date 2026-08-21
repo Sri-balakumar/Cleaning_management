@@ -1,11 +1,11 @@
 {
   "expo": {
     "name": "369 Showroom Check",
-    "slug": "cleaning-management",
+    "slug": "showroom-check",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
-    "scheme": "cleanpro",
+    "scheme": "showroomcheck",
     "userInterfaceStyle": "light",
     "newArchEnabled": true,
     "splash": {
@@ -14,7 +14,7 @@
     },
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.alphalize.cleanpro369",
+      "bundleIdentifier": "com.alphalize.showroomcheck369",
       "userInterfaceStyle": "light"
     },
     "android": {
@@ -24,7 +24,7 @@
       },
       "edgeToEdgeEnabled": true,
       "predictiveBackGestureEnabled": false,
-      "package": "com.alphalize.cleanpro369",
+      "package": "com.alphalize.showroomcheck369",
       "softwareKeyboardLayoutMode": "resize",
       "userInterfaceStyle": "light"
     },
@@ -48,20 +48,20 @@
       [
         "expo-camera",
         {
-          "cameraPermission": "369 CleanPro uses the camera to record a short clip showing a cleaning round was completed, and to photograph how each view of the showroom should look.",
+          "cameraPermission": "369 Showroom Check uses the camera to record a short clip showing a cleaning round was completed, and to photograph how each view of the showroom should look.",
           "recordAudioAndroid": false
         }
       ],
       [
         "expo-sensors",
         {
-          "motionPermission": "369 CleanPro senses when you turn, so it can tell you which way to face for each photograph of the room."
+          "motionPermission": "369 Showroom Check senses when you turn, so it can tell you which way to face for each photograph of the room."
         }
       ],
       [
         "expo-image-picker",
         {
-          "photosPermission": "369 CleanPro can use a photograph you already have as the original for a view of the showroom."
+          "photosPermission": "369 Showroom Check can use a photograph you already have as the original for a view of the showroom."
         }
       ],
       "@react-native-community/datetimepicker",

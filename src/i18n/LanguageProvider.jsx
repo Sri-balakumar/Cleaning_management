@@ -2,7 +2,7 @@ import React, { createContext, useCallback, useContext, useEffect, useMemo, useS
 import { getItem, setItem } from '../utils/deviceStore';
 import { dictionaries } from './translations';
 
-const LANGUAGE_KEY = 'cleanpro.language';
+const LANGUAGE_KEY = 'showroomcheck.language';
 const DEFAULT_LANGUAGE = 'en';
 
 /**

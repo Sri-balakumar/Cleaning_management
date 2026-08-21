@@ -19,8 +19,8 @@ export default function Index() {
         <GradientOrbs />
         <View style={styles.center}>
           {/* The same mark the login screen carries, and no product name.
-              This said "369 CleanPro" long after the app became Showroom
-              Check - a name in two places goes stale in one of them. */}
+              This carried a stale product name long after the app was
+              renamed - a name in two places goes stale in one of them. */}
           <Image
             source={require('../assets/logo-369.png')}
             style={styles.logo}

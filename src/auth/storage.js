@@ -7,9 +7,9 @@ import { getItem, removeItem, setItem } from '../utils/deviceStore';
  * memory for the session instead.
  */
 const MAX_SECURE_VALUE_BYTES = 1800;
-const SESSION_KEY = 'cleanpro.session';
-const PASSWORD_KEY = 'cleanpro.password';
-const LAST_SERVER_KEY = 'cleanpro.lastServer';
+const SESSION_KEY = 'showroomcheck.session';
+const PASSWORD_KEY = 'showroomcheck.password';
+const LAST_SERVER_KEY = 'showroomcheck.lastServer';
 export async function saveSession(session) {
   const payload = JSON.stringify(session);
   if (payload.length > MAX_SECURE_VALUE_BYTES) {

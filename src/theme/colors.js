@@ -1,5 +1,5 @@
 /**
- * 369 CleanPro palette. Indigo -> sky gradient brand with a slate neutral ramp.
+ * 369 Showroom Check palette. Indigo -> sky gradient brand with a slate neutral ramp.
  * Keep every colour used by the app here so screens never hardcode hex values.
  */
 export const colors = {

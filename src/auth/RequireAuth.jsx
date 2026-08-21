@@ -8,7 +8,7 @@ import { log } from '../utils/log';
  *
  * `/recorder` and `/recording/[id]` are root-level routes, so neither the boot
  * gate on `/` nor the tabs layout ever runs for them. Without this, reloading
- * the bundle while one of them is open - or following a `cleanpro://recorder`
+ * the bundle while one of them is open - or following a `showroomcheck://recorder`
  * link - opens the camera on a signed-out app.
  *
  * The screen is only mounted once there is a session, so its permission
