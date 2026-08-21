@@ -52,6 +52,21 @@ const page = ({ html, hasPdf, pdfLabel, emptyLabel, rtl }) => `<!DOCTYPE html>
   pre { overflow-x: auto; background: #F8FAFC; padding: 12px; border-radius: 8px; }
   a { color: #4F46E5; }
   .sc-empty { color: #64748B; font-style: italic; }
+  /* The guides style themselves through these four, not inline, so the same
+     body can be dressed differently here and in the backend. Keep them in step
+     with the backend shell in controllers/main.py: a class defined there and
+     not here is a paragraph that silently loses its box on a phone.
+
+     No font-size on .note - the sizes above are set larger than the backend's
+     on purpose, because this is read at arm's length. */
+  .note { margin: 16px 0; padding: 12px 14px; background: #FFF8E7; border-radius: 10px; }
+  .shot { margin: 18px 0 4px; text-align: center; }
+  .shot img { border: 1px solid #E2E8F0; border-radius: 10px; }
+  .caption {
+    margin: 0 0 20px; text-align: center;
+    color: #64748B; font-size: 13px; font-style: italic;
+  }
+  .muted { color: #64748B; margin-top: 24px; }
   .sc-pdf {
     display: block; width: 100%; margin-top: 28px; padding: 15px 18px;
     background: #4F46E5; color: #fff; border: 0; border-radius: 12px;
