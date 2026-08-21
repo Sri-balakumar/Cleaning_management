@@ -439,6 +439,11 @@ export const en = {
   userManual: 'User manual',
   mobileApp: 'Mobile app',
   managersOnly: 'Managers only',
+  // Headings over a shelf holding both audiences, which only a manager ever
+  // sees. "Everyone" rather than "users": these are the documents a manager
+  // shares with their team, not a separate set kept from them.
+  manualsForEveryone: 'For everyone',
+  manualsForManagers: 'For managers',
   openFullPdf: 'Open full PDF',
   guideNotWritten: 'This guide has not been written yet.',
   noManualUploaded: 'No manual has been uploaded yet.',
@@ -880,6 +885,8 @@ export const ar = {
   userManual: 'دليل المستخدم',
   mobileApp: 'تطبيق الجوال',
   managersOnly: 'للمديرين فقط',
+  manualsForEveryone: 'للجميع',
+  manualsForManagers: 'للمديرين',
   openFullPdf: 'افتح الملف كاملاً',
   guideNotWritten: 'لم يُكتب هذا الدليل بعد.',
   noManualUploaded: 'لم يتم رفع أي دليل بعد.',

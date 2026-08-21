@@ -8,11 +8,13 @@ import { AppError } from '../src/api/errors';
 import { fetchManuals } from '../src/api/manual';
 import { useAuth } from '../src/auth/AuthContext';
 import { RequireAuth } from '../src/auth/RequireAuth';
+import { ErrorBanner } from '../src/components/ErrorBanner';
 import { GradientBackground, GradientOrbs } from '../src/components/GradientBackground';
 import { ManualList } from '../src/components/ManualList';
-import { useT } from '../src/i18n/LanguageProvider';
+import { translateError, useT } from '../src/i18n/LanguageProvider';
 import { colors, radius, spacing, typography } from '../src/theme';
 import { log } from '../src/utils/log';
+import { openManualPdf } from '../src/utils/openManual';
 
 /**
  * Help: the guides written for the app.
@@ -41,6 +43,11 @@ function HelpScreen() {
 
   const [manuals, setManuals] = useState([]);
   const [loading, setLoading] = useState(true);
+  // Which row is fetching its document. The list shows a spinner in its place,
+  // because a PDF arrives over the same RPC as everything else and a large one
+  // takes long enough that a row which does nothing reads as broken.
+  const [openingId, setOpeningId] = useState(null);
+  const [error, setError] = useState(null);
 
   useEffect(() => {
     if (!connection) {
@@ -73,9 +80,34 @@ function HelpScreen() {
     [manuals],
   );
 
-  // The guide, not the document. Most questions are answered by the guide, and
-  // the PDF behind it is one button further on for whoever wants all of it.
-  const open = useCallback((manual) => router.push(`/guide/${manual.id}`), [router]);
+  // The document itself, not a page about it. These are the app's own manuals:
+  // somebody opening one wants the manual, and a preview they have to read
+  // through before pressing a second button is a step in front of the thing
+  // they came for.
+  //
+  // The guide screen is still the answer for a document with no PDF - a guide
+  // can be written long before anyone gets round to the document - so that is
+  // where those fall through to.
+  const open = useCallback(
+    async (manual) => {
+      if (!manual.has_pdf) {
+        router.push(`/guide/${manual.id}`);
+        return;
+      }
+      setError(null);
+      setOpeningId(manual.id);
+      try {
+        await openManualPdf(connection.baseUrl, manual.id);
+      } catch (e) {
+        // Said out loud, unlike a shelf that comes back empty: they tapped the
+        // row, so they are owed a reason it did not open.
+        setError(translateError(t, AppError.from(e)));
+      } finally {
+        setOpeningId(null);
+      }
+    },
+    [connection, router, t],
+  );
 
   return (
     <View style={styles.screen}>
@@ -93,8 +125,15 @@ function HelpScreen() {
         contentContainerStyle={[styles.body, { paddingBottom: spacing.xxxl + insets.bottom }]}
         showsVerticalScrollIndicator={false}
       >
+        {error ? <ErrorBanner message={error} /> : null}
+
         <View style={styles.card}>
-          <ManualList manuals={appManuals} loading={loading} onOpen={open} />
+          <ManualList
+            manuals={appManuals}
+            loading={loading}
+            busyId={openingId}
+            onOpen={open}
+          />
         </View>
       </ScrollView>
     </View>

@@ -39,7 +39,27 @@ export function ManualList({ manuals, loading, busyId = null, onOpen }) {
     );
   }
 
-  return manuals.map((manual, index) => (
+  // A shelf holding both audiences is split under headings, which only a
+  // manager ever sees -- they are the only one the server sends both to. Two
+  // documents in a flat list leaves them working out which of the two is the
+  // one their cleaners get; a heading answers it before they have to ask.
+  //
+  // One audience, no headings. A user's shelf must not look like a section of
+  // something larger, because nothing on it is held back from them, and a
+  // manager with only their own document has nothing to tell apart.
+  const groups = [
+    { key: 'user', label: t.manualsForEveryone },
+    { key: 'manager', label: t.manualsForManagers },
+  ]
+    .map((group) => ({
+      ...group,
+      rows: manuals.filter((manual) => (manual.audience || 'user') === group.key),
+    }))
+    .filter((group) => group.rows.length);
+
+  const grouped = groups.length > 1;
+
+  const renderRow = (manual, isLast) => (
     <Pressable
       key={manual.id}
       onPress={() => void onOpen(manual)}
@@ -49,7 +69,7 @@ export function ManualList({ manuals, loading, busyId = null, onOpen }) {
       style={({ pressed }) => [
         styles.row,
         rtlRow,
-        index === manuals.length - 1 ? styles.rowLast : null,
+        isLast ? styles.rowLast : null,
         pressed ? styles.rowPressed : null,
       ]}
     >
@@ -60,25 +80,56 @@ export function ManualList({ manuals, loading, busyId = null, onOpen }) {
         <Text style={[styles.name, rtlText]} numberOfLines={2}>
           {manual.name}
         </Text>
-        {/* Only a manager ever sees a mixed shelf, so this caption only ever
-            appears for them. A user's rows carry none, which is the point --
-            nothing on their shelf is held back from anyone. */}
-        {manual.audience === 'manager' ? (
+        {/* Only when there is no heading already saying it. Labelling a row
+            that sits under "For managers" says the same thing twice. */}
+        {!grouped && manual.audience === 'manager' ? (
           <Text style={[styles.caption, rtlText]}>{t.managersOnly}</Text>
         ) : null}
       </View>
       {busyId === manual.id ? (
         <ActivityIndicator color={colors.primary} />
       ) : (
-        // A chevron rather than an external-link arrow: this opens the guide
-        // inside the app. The PDF, which does leave, is a button on the guide.
+        // The icon says where the tap goes. A document hands off to whatever
+        // reads PDFs on this phone, and leaving the app unannounced is what
+        // makes people think they have lost their place; a row with no document
+        // opens its guide in here, and keeps the chevron that says so.
         <Ionicons
-          name={isRTL ? 'chevron-back' : 'chevron-forward'}
+          name={
+            manual.has_pdf
+              ? 'open-outline'
+              : isRTL
+                ? 'chevron-back'
+                : 'chevron-forward'
+          }
           size={18}
           color={colors.textMuted}
         />
       )}
     </Pressable>
+  );
+
+  if (!grouped) {
+    return manuals.map((manual, index) =>
+      renderRow(manual, index === manuals.length - 1));
+  }
+
+  return groups.map((group, groupIndex) => (
+    <View key={group.key}>
+      <Text
+        accessibilityRole="header"
+        style={[
+          styles.groupLabel,
+          rtlText,
+          groupIndex === 0 ? styles.groupLabelFirst : null,
+        ]}
+      >
+        {group.label}
+      </Text>
+      {group.rows.map((manual, index) =>
+        // The rule under the last row of a group would sit directly above the
+        // next heading, reading as its underline rather than as a separator.
+        renderRow(manual, index === group.rows.length - 1))}
+    </View>
   ));
 }
 
@@ -105,6 +156,11 @@ const styles = StyleSheet.create({
   titleCol: { flex: 1 },
   name: { ...typography.body },
   caption: { ...typography.caption, marginTop: 2 },
+  // The token exists for exactly this: "small all-caps section header used
+  // above grouped cards".
+  groupLabel: { ...typography.overline, marginTop: spacing.lg, marginBottom: spacing.xs },
+  // The first heading sits at the top of the card, which already has padding.
+  groupLabelFirst: { marginTop: 0 },
   // Matches the "Not set" treatment elsewhere: muted and italic, so an empty
   // shelf never reads as a heading with real content under it.
   empty: { ...typography.body, flex: 1, color: colors.textMuted, fontStyle: 'italic' },
