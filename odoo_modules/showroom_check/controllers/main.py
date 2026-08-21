@@ -1,7 +1,7 @@
 import logging
 import re
 
-from markupsafe import escape
+from markupsafe import Markup
 
 from odoo import fields, http
 from odoo.exceptions import AccessError, UserError, ValidationError
@@ -83,6 +83,74 @@ def _browser_name(user_agent):
         if needle in agent:
             return label
     return 'Other'
+
+
+# The shell every guide is served in: the head, the bar across the top and the
+# column the guide itself sits in. Four placeholders, in order: the title twice
+# (the tab and the bar), the PDF button, and the guide body.
+#
+# Every literal percent below is DOUBLED, because this is filled in with the %
+# operator and a single one there raises "unsupported format character" on the
+# request rather than at import - so it would ship green and 500 in front of a
+# reader.
+#
+# The stylesheet lives here rather than inside each guide because the guides are
+# written as fragments - headings, paragraphs, lists and nothing else. Styling
+# them from the shell means a guide typed into the web form months from now
+# arrives looking like the two that ship with the module, without whoever wrote
+# it having to know any of this.
+_GUIDE_PAGE = (
+    '<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"/>'
+    '<meta name="viewport" content="width=device-width, initial-scale=1.0"/>'
+    '<title>%s</title>'
+    '<style>'
+    'body{margin:0;font-family:"Segoe UI",Arial,sans-serif;color:#222;}'
+    '.bar{position:sticky;top:0;z-index:5;background:#2f3b8c;color:#fff;'
+    'padding:11px 18px;display:flex;align-items:center;'
+    'justify-content:space-between;gap:16px;}'
+    '.bar h1{margin:0;font-weight:bold;font-size:16px;}'
+    '.btn{background:#fff;color:#2f3b8c;border:none;border-radius:6px;'
+    'padding:7px 14px;font-weight:600;text-decoration:none;white-space:nowrap;}'
+    # Everything below is scoped to .g, and the names are the HR suite's own
+    # (.g, .note, .flow). A guide written for one of those modules can be
+    # dropped in here and will look exactly as it did there.
+    '.g{max-width:980px;margin:0 auto;padding:24px;line-height:1.6;color:#222;}'
+    '.g h1{color:#875A7B;font-size:24px;margin:0 0 6px;}'
+    '.g h2{color:#875A7B;border-bottom:2px solid #875A7B;padding-bottom:5px;'
+    'margin-top:26px;font-size:19px;}'
+    '.g h3{color:#5d3f54;margin-top:18px;font-size:15px;}'
+    '.g table{border-collapse:collapse;width:100%%;margin:10px 0;font-size:14px;}'
+    '.g th,.g td{border:1px solid #e3dde2;padding:7px 10px;text-align:left;'
+    'vertical-align:top;}'
+    '.g th{background:#875A7B;color:#fff;}'
+    '.g tr:nth-child(even) td{background:#faf7f9;}'
+    '.g code{background:#f3eef2;padding:1px 6px;border-radius:4px;'
+    'font-family:Consolas,monospace;}'
+    '.g a{color:#2f3b8c;}'
+    '.g .note{background:#fff3cd;border:1px solid #e0c97a;border-radius:6px;'
+    'padding:10px 14px;margin:12px 0;}'
+    '.g .flow{background:#f7f4f6;border:1px solid #e3dde2;border-radius:6px;'
+    'padding:10px 14px;font-family:Consolas,monospace;font-size:13px;'
+    'white-space:pre-wrap;}'
+    '.g .muted{color:#6b5c66;}'
+    # The HR guides carry no pictures, so these two have no counterpart to copy
+    # and are written to sit inside the same palette: a plum-grey frame, and a
+    # caption quiet enough to read as a label rather than as more prose.
+    '.g .shot{margin:18px 0 4px;text-align:center;}'
+    '.g .shot img{max-width:100%%;height:auto;border:1px solid #e3dde2;'
+    'border-radius:6px;}'
+    '.g img{max-width:100%%;height:auto;}'
+    '.g .caption{margin:0 0 20px;text-align:center;color:#6b5c66;font-size:13px;'
+    'font-style:italic;}'
+    # A guide is read at length and sometimes printed. The bar is a navigation
+    # device and means nothing on paper.
+    '@media print{.bar{display:none;}.g{max-width:none;padding:0;}}'
+    '</style></head>'
+    '<body>'
+    '<div class="bar"><h1>%s</h1>%s</div>'
+    '<div class="g">%s</div>'
+    '</body></html>'
+)
 
 
 class CleaningManagementController(http.Controller):
@@ -496,36 +564,27 @@ class CleaningManagementController(http.Controller):
         if not guide:
             return request.not_found()
 
-        title = escape(guide['name'])
-        body = guide['html'] or (
-            '<p style="color:#64748B;">This guide has not been written yet.</p>')
+        # Everything below goes through Markup's % operator, which escapes a
+        # plain string and lets anything carrying __html__ through untouched.
+        # That is the whole difference between a title and a guide: the title is
+        # a value somebody typed, the guide is markup somebody wrote.
+        #
+        # Never build this page by adding strings together. Markup defines
+        # __radd__, so 'literal' + markup escapes the LITERAL and hands back a
+        # Markup that escapes everything added after it - which turns the whole
+        # page into visible source and is exactly the bug this replaces.
+        body = Markup(guide['html']) if guide['html'] else Markup(
+            '<p class="muted">This guide has not been written yet.</p>')
 
-        button = ''
+        button = Markup('')
         if guide['has_pdf']:
             pdf_url = manual.sudo().browse(manual_id).pdf_url or ''
-            button = (
-                '<a href="%s" target="_blank" rel="noopener" '
-                'style="background:#fff;color:#4F46E5;border-radius:8px;padding:8px 16px;'
-                'font-weight:600;text-decoration:none;white-space:nowrap;">'
-                '&#128196; Open in PDF doc</a>' % escape(pdf_url)
-            )
+            button = Markup(
+                '<a class="btn" href="%s" target="_blank" rel="noopener">'
+                '&#128196; Open in PDF doc</a>') % pdf_url
 
-        html = (
-            '<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"/>'
-            '<meta name="viewport" content="width=device-width, initial-scale=1.0"/>'
-            '<title>' + title + '</title></head>'
-            '<body style="margin:0;font-family:Segoe UI,system-ui,Arial,sans-serif;'
-            'color:#0F172A;background:#F1F5F9;">'
-            '<div style="position:sticky;top:0;z-index:5;background:#4F46E5;color:#fff;'
-            'padding:12px 20px;display:flex;align-items:center;justify-content:space-between;'
-            'gap:16px;">'
-            '<span style="font-weight:700;font-size:16px;">' + title + '</span>'
-            + button +
-            '</div>'
-            '<div style="max-width:900px;margin:0 auto;padding:24px;background:#fff;'
-            'min-height:calc(100vh - 54px);line-height:1.6;">' + body + '</div>'
-            '</body></html>'
-        )
+        title = guide['name'] or 'Guide'
+        html = Markup(_GUIDE_PAGE) % (title, title, button, body)
         return request.make_response(html, headers=[
             ('Content-Type', 'text/html; charset=utf-8'),
             ('Cache-Control', 'no-store'),
