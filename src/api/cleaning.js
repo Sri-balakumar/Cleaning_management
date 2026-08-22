@@ -268,6 +268,64 @@ export const fetchMissedRounds = (baseUrl, { limit = 120 } = {}) =>
   });
 
 /**
+ * Rounds that came in below the level a manager set, newest first.
+ *
+ * Manager-only, and the server is what enforces that: it answers
+ * `{is_manager: false, rows: []}` to anybody else rather than trusting the app
+ * not to ask. A chip that is not drawn is not access control -- this is
+ * reachable over call_kw by anyone holding a session.
+ *
+ * Facts, not sentences. Rows carry the score, the slot and who recorded it;
+ * the wording is the app's own, in the language chosen on the phone rather
+ * than the one on the Odoo account. Same rule as recomputeMatch above.
+ *
+ * Shape: { is_manager, threshold, seen_at, unread_count, rows: [{ id,
+ * slot_name, slot_date, user_name, match_score, match_worst_label, matched_at,
+ * is_unread }] }.
+ */
+export const fetchNotifications = (baseUrl, { limit = 50 } = {}) =>
+  rpc(baseUrl, '/web/dataset/call_kw', {
+    model: 'cleaning.recording',
+    method: 'notification_feed',
+    args: [],
+    kwargs: { limit },
+  });
+
+/** Everything scored up to now counts as read, which clears the badge. */
+export const markNotificationsSeen = (baseUrl) =>
+  rpc(baseUrl, '/web/dataset/call_kw', {
+    model: 'cleaning.recording',
+    method: 'mark_notifications_seen',
+    args: [],
+    kwargs: {},
+  });
+
+/**
+ * Tell the server this phone can be notified.
+ *
+ * The token comes from Firebase by way of expo-notifications; the server keeps
+ * it against the signed-in user and sends low rounds to it. A regular user
+ * calling this is a silent no-op server-side -- only managers are ever
+ * notified, so only their phones are worth storing.
+ */
+export const registerDevice = (baseUrl, token, platform = 'android') =>
+  rpc(baseUrl, '/web/dataset/call_kw', {
+    model: 'cleaning.push.device',
+    method: 'register_device',
+    args: [token, platform],
+    kwargs: {},
+  });
+
+/** Forget this phone, on sign-out. */
+export const unregisterDevice = (baseUrl, token) =>
+  rpc(baseUrl, '/web/dataset/call_kw', {
+    model: 'cleaning.push.device',
+    method: 'unregister_device',
+    args: [token],
+    kwargs: {},
+  });
+
+/**
  * Delete recordings. Managers only -- the ACL withholds unlink from a regular
  * user, so this is refused server-side even if the interface ever offered it.
  *

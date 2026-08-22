@@ -1,6 +1,6 @@
 {
     'name': 'Showroom Check',
-    'version': '19.0.3.9.0',
+    'version': '19.0.3.10.0',
     'category': 'Operations',
     'summary': 'Scheduled photo check that a showroom matches its agreed layout',
     'description': """
@@ -57,6 +57,7 @@ detects this and explains it. See ``doc/README.md`` for the reverse-proxy setup.
         'views/cleaning_slot_missed_views.xml',
         'views/cleaning_ai_views.xml',
         'views/cleaning_manual_views.xml',
+        'views/cleaning_push_views.xml',
         # Deliberately NO res.config.settings extension. Inheriting the shared
         # settings form makes Odoo revalidate every other module's additions to
         # it, so one unrelated stale view anywhere in the database blocks this

@@ -56,6 +56,8 @@ function configPayload(config) {
     require_photos: !!config.require_photos,
     match_warn_threshold: Number(config.match_warn_threshold) || 0,
     match_alert_threshold: Number(config.match_alert_threshold) || 0,
+    notify_low_match: !!config.notify_low_match,
+    notify_threshold: Number(config.notify_threshold) || 0,
   };
 }
 
@@ -305,8 +307,30 @@ function SettingsScreen() {
                 hint={t.thresholdsHint}
                 value={config.match_alert_threshold}
                 onChange={(v) => set({ match_alert_threshold: v })}
-                last
               />
+              {/* Kept beside the two warning levels rather than given a section
+                  of its own, because the three numbers are read together: what
+                  turns a badge amber, what turns it red, and what is worth
+                  interrupting somebody over. The server form groups them the
+                  same way, under Settings > Showroom Photos. */}
+              <ToggleRow
+                label={t.notifyLowMatch}
+                hint={t.notifyLowMatchHint}
+                value={config.notify_low_match}
+                onChange={(v) => set({ notify_low_match: v })}
+                last={!config.notify_low_match}
+              />
+              {/* Put away when the toggle is off: a level that decides nothing
+                  should not sit there inviting somebody to tune it. */}
+              {config.notify_low_match ? (
+                <NumberRow
+                  label={t.notifyBelow}
+                  hint={t.notifyBelowHint}
+                  value={config.notify_threshold}
+                  onChange={(v) => set({ notify_threshold: v })}
+                  last
+                />
+              ) : null}
             </InfoCard>
             ) : null}
 

@@ -43,3 +43,19 @@ yarn-error.*
 # Python
 __pycache__/
 *.pyc
+
+# Firebase service account keys. google-services.json is NOT secret and is
+# meant to be committed - it ships inside the APK and is readable from any
+# installed copy. The service account key is the opposite: it lets whoever
+# holds it send notifications as you, and belongs pasted into Odoo's Push
+# settings, never in this repository.
+#
+# Every pattern here starts with * on purpose. Google names these files
+# <project>-firebase-adminsdk-<hash>.json, so an unanchored-looking pattern
+# like "firebase-adminsdk-*.json" still has to match from the START of the
+# basename and silently matches nothing at all. That was the original rule
+# here, and it let a real key sit unignored in the repository root.
+*service-account*.json
+*serviceaccount*.json
+*firebase-adminsdk*.json
+*-adminsdk-*.json

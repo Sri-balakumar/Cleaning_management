@@ -19,3 +19,6 @@ access_cleaning_recording_shot_manager,cleaning.recording.shot manager,model_cle
 access_cleaning_compare_result_manager,cleaning.compare.result manager,model_cleaning_compare_result,showroom_check.group_cleaning_manager,1,1,1,1
 access_cleaning_manual_user,cleaning.manual user,model_cleaning_manual,showroom_check.group_cleaning_user,1,0,0,0
 access_cleaning_manual_manager,cleaning.manual manager,model_cleaning_manual,showroom_check.group_cleaning_manager,1,1,1,1
+access_cleaning_push_config_manager,cleaning.push.config manager,model_cleaning_push_config,showroom_check.group_cleaning_manager,1,1,1,1
+access_cleaning_push_device_user,cleaning.push.device user,model_cleaning_push_device,showroom_check.group_cleaning_user,1,1,1,1
+access_cleaning_push_device_manager,cleaning.push.device manager,model_cleaning_push_device,showroom_check.group_cleaning_manager,1,1,1,1

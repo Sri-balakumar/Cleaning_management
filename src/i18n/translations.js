@@ -65,6 +65,7 @@ export const en = {
   goodEvening: 'Good evening',
   statRecorded: 'Recorded',
   statMissed: 'Missed',
+  statLowRounds: 'Low',
   openNow: 'Open now',
   upNext: 'Up next',
   allDone: 'All done',
@@ -260,6 +261,10 @@ export const en = {
   missedRounds: 'Missed rounds',
   nothingMissed: 'Nothing missed',
   nothingMissedBody: 'Every round that has closed was recorded. Today is still in progress and shows on the dashboard.',
+  lowRounds: 'Low rounds',
+  lowRoundsBelow: 'Rounds scoring below %s%',
+  noLowRounds: 'Nothing to look at',
+  noLowRoundsBody: 'No round has come in below the level set in the settings. Lower it there if you want to be told about more of them.',
   dayPeriod: 'Period',
   everyDay: 'Every day',
   noDays: 'No days',
@@ -331,6 +336,12 @@ export const en = {
   alertBelow: 'Alert below',
   thresholdsHint:
     'Two photographs of a room where nothing has moved do not score 100 — the light changes, and nobody stands in exactly the same place twice. Expect a good match in the seventies or eighties.',
+  notifyLowMatch: 'Tell managers about a low round',
+  notifyLowMatchHint:
+    'Sends a notification to every manager who has signed in on a phone and allowed them. The person who walked the round is told nothing.',
+  notifyBelow: 'Notify below',
+  notifyBelowHint:
+    "The round's own score, which is its worst view rather than its average. Separate from the two levels above on purpose: you may want a round to read amber at 60 but only want interrupting at 45.",
   whoMode: 'Who may record',
   everyone: 'Everyone',
   namedList: 'A named list',
@@ -526,6 +537,7 @@ export const ar = {
   goodEvening: 'مساء الخير',
   statRecorded: 'مُسجَّلة',
   statMissed: 'فائتة',
+  statLowRounds: 'منخفضة',
   openNow: 'مفتوحة الآن',
   upNext: 'التالية',
   allDone: 'اكتملت',
@@ -708,6 +720,10 @@ export const ar = {
   missedRounds: 'الجولات الفائتة',
   nothingMissed: 'لم يفت شيء',
   nothingMissedBody: 'تم تسجيل كل جولة انتهت مدتها. جولات اليوم ما زالت جارية وتظهر في لوحة المعلومات.',
+  lowRounds: 'الجولات المنخفضة',
+  lowRoundsBelow: 'الجولات الحاصلة على أقل من %s%',
+  noLowRounds: 'لا شيء يستدعي النظر',
+  noLowRoundsBody: 'لم تنزل أي جولة تحت المستوى المحدد في الإعدادات. اخفض المستوى هناك إذا أردت معرفة المزيد منها.',
   dayPeriod: 'الفترة',
   everyDay: 'كل يوم',
   noDays: 'بلا أيام',
@@ -779,6 +795,12 @@ export const ar = {
   alertBelow: 'إنذار أقل من',
   thresholdsHint:
     'صورتان لغرفة لم يتغير فيها شيء لا تحصلان على 100 — فالإضاءة تتغير، ولا أحد يقف في المكان نفسه تمامًا مرتين. توقّع تطابقًا جيدًا في السبعينات أو الثمانينات.',
+  notifyLowMatch: 'إبلاغ المديرين عن الجولة المنخفضة',
+  notifyLowMatchHint:
+    'يرسل إشعارًا إلى كل مدير سجّل الدخول على هاتفه وسمح بالإشعارات. أما من قام بالجولة فلا يُبلَّغ بشيء.',
+  notifyBelow: 'إشعار أقل من',
+  notifyBelowHint:
+    'درجة الجولة نفسها، وهي أسوأ زاوية فيها وليست المتوسط. منفصلة عن المستويين أعلاه عن قصد: قد ترغب في أن تظهر الجولة بالكهرماني عند 60 بينما لا تريد الإزعاج إلا عند 45.',
   whoMode: 'من يمكنه التسجيل',
   everyone: 'الجميع',
   namedList: 'قائمة محددة',

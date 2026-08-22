@@ -82,6 +82,22 @@
               groups="showroom_check.group_cleaning_manager"
               sequence="30"/>
 
+    <menuitem id="menu_cleaning_push"
+              name="Push Notifications"
+              parent="menu_cleaning_configuration"
+              action="showroom_check.action_cleaning_push_config_open"
+              groups="showroom_check.group_cleaning_manager"
+              sequence="40"/>
+
+    <!-- Under Configuration rather than Reporting: it is a list of which
+         phones are wired up, which is setup, not something to read daily. -->
+    <menuitem id="menu_cleaning_push_devices"
+              name="Registered Phones"
+              parent="menu_cleaning_configuration"
+              action="showroom_check.action_cleaning_push_device"
+              groups="showroom_check.group_cleaning_manager"
+              sequence="50"/>
+
     <menuitem id="menu_cleaning_slots"
               name="Rounds"
               parent="menu_cleaning_configuration"

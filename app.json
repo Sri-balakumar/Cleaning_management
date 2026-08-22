@@ -9,6 +9,7 @@
     "userInterfaceStyle": "light",
     "newArchEnabled": true,
     "splash": {
+      "image": "./assets/splash-icon.png",
       "resizeMode": "contain",
       "backgroundColor": "#FFFFFF"
     },
@@ -26,7 +27,8 @@
       "predictiveBackGestureEnabled": false,
       "package": "com.alphalize.showroomcheck369",
       "softwareKeyboardLayoutMode": "resize",
-      "userInterfaceStyle": "light"
+      "userInterfaceStyle": "light",
+      "googleServicesFile": "./google-services.json"
     },
     "web": {
       "favicon": "./assets/favicon.png",
@@ -36,6 +38,7 @@
       "expo-router",
       "expo-secure-store",
       "expo-font",
+      "expo-notifications",
       [
         "expo-build-properties",
         {

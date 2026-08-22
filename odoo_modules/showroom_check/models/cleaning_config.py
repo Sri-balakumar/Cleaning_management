@@ -301,6 +301,29 @@ class CleaningConfig(models.Model):
         string='Alert Below', default=50,
         help="A view scoring below this is flagged red: something has changed.")
 
+    # --- Telling somebody -------------------------------------------------
+    #
+    # A third number rather than reusing Warn Below, because colouring a badge
+    # and interrupting somebody's morning are different decisions. A manager
+    # may well want a round to read amber at 60 and only want telling at 45,
+    # and tying the two together means they can only have that by giving up
+    # the amber.
+    notify_low_match = fields.Boolean(
+        string='Tell managers about a low round', default=True,
+        help="Sends a notification to the phone of every Showroom Check "
+             "Manager when a round comes in below the level set here.\n\n"
+             "The round always appears in the app's Notifications list either "
+             "way. This is only about whether anybody's phone buzzes.")
+    notify_threshold = fields.Integer(
+        string='Notify Below', default=60,
+        help="A round whose worst view scores below this is worth telling "
+             "somebody about.\n\n"
+             "The ROUND's score, which is its worst view rather than its "
+             "average - one bad wall is the entire reason anybody wants "
+             "telling, and an average would smooth it away.\n\n"
+             "Set it lower than Warn Below if the amber badge is useful but "
+             "you only want interrupting when something is properly wrong.")
+
     # --- Recording --------------------------------------------------------
     video_enabled = fields.Boolean(
         string='Also record a video', default=True,
@@ -411,6 +434,13 @@ class CleaningConfig(models.Model):
         'AND match_alert_threshold <= match_warn_threshold)',
         'The alert level must be at or below the warning level, and both '
         'between 0 and 100.',
+    )
+    # Deliberately NOT constrained against the two above. It is an independent
+    # decision: "tell me" may sit anywhere - below alert to be left alone
+    # unless it is bad, or above warn to hear about everything.
+    _check_notify_threshold = models.Constraint(
+        'CHECK (notify_threshold >= 0 AND notify_threshold <= 100)',
+        'The notification level must be between 0 and 100.',
     )
 
     # ------------------------------------------------------------------
@@ -996,4 +1026,14 @@ class CleaningConfig(models.Model):
             'today_total': len(rows),
             'today_done': len([r for r in rows if r['state'] == 'done']),
             'today_missed': len([r for r in rows if r['state'] == 'missed']),
+            # Rides this call rather than polling of its own: the dashboard
+            # already asks every 15-60 seconds while it is open, so the badge
+            # costs one search_count on stored columns and no new traffic.
+            #
+            # A flat 0 for anybody who is not a manager. Not "hidden in the
+            # interface" - never sent, so how many rounds scored badly does not
+            # leak to the people being measured, even as a number.
+            'low_match_unread': (
+                self.env['cleaning.recording']._low_match_unread_count(config)
+                if is_manager else 0),
         }

@@ -408,6 +408,17 @@ class CleaningManagementController(http.Controller):
                     for key, (data, part_mimetype) in photos.items()
                 ])
 
+            # Everything is stored and scored by here, whichever way the round
+            # arrived, so this is the one place a notification fires exactly
+            # once per round. Deliberately NOT inside _run_match_comparison:
+            # three post-migrate scripts re-score every shot in the database,
+            # and a notification hung off that would push the entire history to
+            # every manager's phone the moment the module was upgraded.
+            #
+            # It cannot raise - see _notify_low_match - so the round is safe
+            # even if Firebase is down or misconfigured.
+            recording._notify_low_match()
+
             # Said out loud rather than dropped in silence. Somebody who took
             # the trouble to photograph a fifth view deserves to know it was not
             # kept and why - otherwise they carry on taking it every morning,

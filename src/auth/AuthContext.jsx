@@ -8,6 +8,7 @@ import React, {
   useState,
 } from 'react';
 import { getDashboardState } from '../api/cleaning';
+import { registerForPush, unregisterFromPush } from '../push/registerDevice';
 import { AppError } from '../api/errors';
 import { getSessionCookie, setSessionCookie } from '../api/rpcClient';
 import { authenticate, destroySession, fetchUserRecord, getSessionInfo } from '../api/backend';
@@ -77,6 +78,10 @@ export function AuthProvider({ children }) {
   const [status, setStatus] = useState('restoring');
   const [user, setUser] = useState(null);
   const [connection, setConnection] = useState(null);
+  // The address this phone is reachable at, kept only so sign-out can hand it
+  // back. Nothing reads it for anything else, and it deliberately does not
+  // live in state: changing it must not re-render the whole app.
+  const pushToken = useRef(null);
   const mounted = useRef(true);
   useEffect(() => {
     mounted.current = true;
@@ -114,6 +119,18 @@ export function AuthProvider({ children }) {
     setConnection(nextConnection);
     setUser(buildUser(session, record));
     setStatus('authenticated');
+
+    // Deliberately NOT awaited. Registering talks to Android and then to the
+    // server, and neither is worth making somebody wait at a sign-in button
+    // for -- least of all when the answer may be "this phone cannot be
+    // notified", which changes nothing about whether they can use the app.
+    // Runs on restore as well as sign-in, which is what keeps the token
+    // current: Firebase rotates them, and a stale one silently stops arriving.
+    registerForPush({ baseUrl, isManager: nextConnection.isManager })
+      .then((token) => {
+        pushToken.current = token;
+      })
+      .catch(() => {});
   }, []);
   /**
    * Boot path: reuse the stored cookie if the server still honours it, otherwise
@@ -166,6 +183,13 @@ export function AuthProvider({ children }) {
   const signOut = useCallback(
     async ({ forgetServer = false } = {}) => {
       const baseUrl = connection?.baseUrl;
+      // BEFORE destroySession, while the call is still authenticated. After it
+      // the server would refuse this, and the phone would go on being sent
+      // every low round until Firebase happened to report the token dead.
+      if (baseUrl && pushToken.current) {
+        await unregisterFromPush({ baseUrl, token: pushToken.current });
+        pushToken.current = null;
+      }
       if (baseUrl) await destroySession(baseUrl);
       setSessionCookie(null);
       await clearAll();

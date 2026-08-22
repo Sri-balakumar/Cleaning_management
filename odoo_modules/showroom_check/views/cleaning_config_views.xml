@@ -115,6 +115,28 @@
                                     <field name="require_photos" widget="boolean_toggle"/>
                                 </group>
                             </group>
+
+                            <group string="Telling Somebody">
+                                <group>
+                                    <field name="notify_low_match" widget="boolean_toggle"/>
+                                    <field name="notify_threshold"
+                                           invisible="not notify_low_match"/>
+                                </group>
+                            </group>
+                            <div class="alert alert-info" role="alert"
+                                 invisible="not notify_low_match">
+                                <strong>Managers only.</strong>
+                                A round below this level appears in the
+                                Notifications list in every manager's app, and - once
+                                <em>Configuration &gt; Push Notifications</em> is set up -
+                                sends a notification to their phone. The person who
+                                walked the round is told nothing.
+                                <br/>
+                                This is the ROUND's score, which is its worst view
+                                rather than its average. It is a separate number from
+                                the two above on purpose: you may want a round to read
+                                amber at 60 and only want interrupting at 45.
+                            </div>
                             <div class="alert alert-info" role="alert">
                                 <strong>About these numbers.</strong>
                                 Two photographs of a room where nothing has moved

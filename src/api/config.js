@@ -21,6 +21,8 @@ const CONFIG_FIELDS = [
   'allowed_user_mode', 'allowed_user_ids', 'upload_grace_seconds',
   'retention_number', 'retention_unit', 'retention_mode', 'max_upload_mb',
   'require_photos', 'match_warn_threshold', 'match_alert_threshold',
+  // Which rounds are worth telling a manager about, and whether to.
+  'notify_low_match', 'notify_threshold',
   'reference_count',
 ];
 

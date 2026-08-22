@@ -1,0 +1,131 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+
+    <record id="view_cleaning_push_config_form" model="ir.ui.view">
+        <field name="name">cleaning.push.config.form</field>
+        <field name="model">cleaning.push.config</field>
+        <field name="arch" type="xml">
+            <form string="Push Notification Settings">
+                <header>
+                    <button name="action_test_push" type="object"
+                            string="Test push" class="btn-primary"
+                            icon="fa-bell"/>
+                </header>
+                <sheet>
+                    <div class="oe_title">
+                        <label for="name" string="Push Notifications"/>
+                        <h1><field name="name"/></h1>
+                    </div>
+
+                    <div class="alert alert-info" role="alert">
+                        <strong>Who gets these.</strong>
+                        Every Showroom Check Manager who has signed in to the phone
+                        app and allowed notifications. The people who walk the rounds
+                        are never notified - they are told nothing about how their
+                        round scored, which is deliberate.
+                        <br/>
+                        The level that decides "low" is not here: it is
+                        <em>Settings &gt; Showroom Photos &gt; Notify Below</em>, next to the
+                        two warning levels it sits between.
+                    </div>
+
+                    <group>
+                        <group>
+                            <field name="enabled" widget="boolean_toggle"/>
+                            <field name="company_id" groups="base.group_multi_company"/>
+                        </group>
+                    </group>
+
+                    <group string="Firebase" invisible="not enabled">
+                        <group>
+                            <field name="project_id"
+                                   placeholder="Taken from the key file if left empty"/>
+                            <field name="timeout_seconds"/>
+                        </group>
+                    </group>
+
+                    <group string="Service Account Key" invisible="not enabled"
+                           groups="base.group_system">
+                        <field name="service_account_key" nolabel="1"
+                               placeholder='{ "type": "service_account", "project_id": "...", ... }'/>
+                    </group>
+
+                    <div class="alert alert-warning" role="alert"
+                         invisible="not enabled" groups="base.group_system">
+                        <strong>Two different files, and they are easy to mix up.</strong>
+                        <br/>
+                        <strong>google-services.json</strong> identifies the app and belongs
+                        in the app's own source, not here.
+                        <br/>
+                        <strong>The service account key</strong> - the one that goes in the
+                        box above - is a secret. Anybody holding it can send notifications
+                        as you. Get it from the Firebase console under
+                        <em>Project Settings &gt; Service Accounts &gt; Generate new
+                        private key</em>, and paste the whole file.
+                    </div>
+
+                    <div class="alert alert-info" role="alert"
+                         invisible="not enabled">
+                        <strong>Notifications only reach a real build of the app.</strong>
+                        Android stopped delivering them to Expo Go in SDK 53, so testing
+                        this needs a development build rather than the QR-code preview.
+                        Everything else in the app still works in Expo Go.
+                    </div>
+                </sheet>
+            </form>
+        </field>
+    </record>
+
+    <record id="view_cleaning_push_config_list" model="ir.ui.view">
+        <field name="name">cleaning.push.config.list</field>
+        <field name="model">cleaning.push.config</field>
+        <field name="arch" type="xml">
+            <list string="Push Notification Settings">
+                <field name="name"/>
+                <field name="company_id" groups="base.group_multi_company"/>
+                <field name="project_id"/>
+                <field name="enabled" widget="boolean_toggle"/>
+            </list>
+        </field>
+    </record>
+
+    <!-- The registered phones. Read-only: a row appears when somebody signs in
+         on a phone and goes when they sign out, so there is nothing here worth
+         typing by hand. Deleting one stops that phone being notified until it
+         signs in again, which is the one useful thing to be able to do. -->
+    <record id="view_cleaning_push_device_list" model="ir.ui.view">
+        <field name="name">cleaning.push.device.list</field>
+        <field name="model">cleaning.push.device</field>
+        <field name="arch" type="xml">
+            <list string="Registered Phones" create="false" edit="false">
+                <field name="user_id"/>
+                <field name="platform"/>
+                <field name="last_seen_at"/>
+                <field name="company_id" groups="base.group_multi_company"/>
+            </list>
+        </field>
+    </record>
+
+    <record id="action_cleaning_push_device" model="ir.actions.act_window">
+        <field name="name">Registered Phones</field>
+        <field name="res_model">cleaning.push.device</field>
+        <field name="view_mode">list</field>
+        <field name="help" type="html">
+            <p class="o_view_nocontent_smiling_face">No phone has registered yet</p>
+            <p>
+                A phone appears here after a Showroom Check Manager signs in to the
+                app on it and allows notifications. Only your own phones are listed.
+            </p>
+        </field>
+    </record>
+
+    <!-- Opens the single record rather than a list of one, creating it on
+         first use. Same shape as the AI settings next door. -->
+    <record id="action_cleaning_push_config_open" model="ir.actions.server">
+        <field name="name">Push Notifications</field>
+        <field name="model_id" ref="model_cleaning_push_config"/>
+        <field name="state">code</field>
+        <field name="code">action = model.action_open_settings()</field>
+    </record>
+
+</odoo>

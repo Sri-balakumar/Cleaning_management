@@ -11,3 +11,9 @@ from . import cleaning_recording_ai
 from . import cleaning_slot_missed
 from . import cleaning_compare_result
 from . import cleaning_manual
+# Same rule as cleaning_image_compare: plain functions, imported before the
+# config model that calls into it.
+from . import cleaning_push_provider
+from . import cleaning_push_config
+from . import cleaning_push_device
+from . import res_users

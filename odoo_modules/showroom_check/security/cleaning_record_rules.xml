@@ -112,5 +112,31 @@
             <field name="perm_unlink" eval="True"/>
         </record>
 
+        <!-- Push notification settings: own company. Managers only reach the
+             model at all, and the service account key is additionally hidden
+             behind groups= on the field itself. -->
+        <record id="rule_cleaning_push_config_company" model="ir.rule">
+            <field name="name">Push settings: own company</field>
+            <field name="model_id" ref="model_cleaning_push_config"/>
+            <field name="global" eval="True"/>
+            <field name="domain_force">[('company_id', 'in', company_ids)]</field>
+        </record>
+
+        <!--
+            A registered phone belongs to one person and nobody else reads it.
+
+            Global, so this holds for managers too - unlike the recording rules
+            above, where a manager is meant to see everybody's. A device token
+            is not something a colleague has any business reading: it is the
+            address that phone is reachable at, and the only code that needs
+            every row is the sending itself, which runs sudo().
+        -->
+        <record id="rule_cleaning_push_device_own" model="ir.rule">
+            <field name="name">Registered phone: own only</field>
+            <field name="model_id" ref="model_cleaning_push_device"/>
+            <field name="global" eval="True"/>
+            <field name="domain_force">[('user_id', '=', user.id)]</field>
+        </record>
+
     </data>
 </odoo>

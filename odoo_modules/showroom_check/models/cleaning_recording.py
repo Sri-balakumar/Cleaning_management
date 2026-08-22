@@ -161,6 +161,12 @@ class CleaningRecording(models.Model):
     matched_at = fields.Datetime(
         string='Compared At', compute='_compute_match', store=True)
 
+    low_match_notified_at = fields.Datetime(
+        string='Managers Told At', readonly=True, copy=False,
+        help="Technical: when a notification went out for this round. It is "
+             "what stops a second one being sent every time the round is "
+             "re-scored.")
+
     # Drives read-only state in the form. A view cannot test group membership
     # inside a readonly= expression, so the check is exposed as a field.
     can_manage = fields.Boolean(
@@ -813,6 +819,219 @@ class CleaningRecording(models.Model):
         # that asked for another one. It has its own.
         result.pop('labels', None)
         return result
+
+    # ------------------------------------------------------------------
+    # Telling somebody a round came in low
+    # ------------------------------------------------------------------
+    @api.model
+    def _low_match_domain(self, config):
+        """Rounds worth telling a manager about.
+
+        Every one of these four is a stored column, so this is a real search
+        rather than a filtered read - which matters, because the badge count
+        runs on the dashboard poll.
+
+        `match_worst_label` is the load-bearing clause, not decoration.
+        _compute_match sets match_score to 0 AND match_worst_label to False
+        when not one view of the round could be measured. Leave that clause out
+        and every unreadable round - a camera that failed, an original nobody
+        has set up yet - notifies every manager as a 0% failure. It is the same
+        trap SCORED_LEVELS documents on the client in src/cleaning/matchBands.js:
+        a score of zero and no score at all are not the same thing, and only one
+        of them is anybody's fault.
+        """
+        return [
+            ('company_id', '=', config.company_id.id),
+            ('matched_at', '!=', False),
+            ('match_worst_label', '!=', False),
+            ('match_score', '<', config.notify_threshold),
+        ]
+
+    def _is_low_match(self):
+        """Is this one round below its own company's notify level?"""
+        self.ensure_one()
+        config = self.config_id
+        if not config or not config.notify_low_match:
+            return False
+        return bool(
+            self.matched_at
+            and self.match_worst_label
+            and self.match_score < config.notify_threshold)
+
+    @api.model
+    def _low_match_unread_count(self, config):
+        """How many low rounds have arrived since this user last looked."""
+        if not config or not config.notify_low_match:
+            return 0
+        domain = self._low_match_domain(config)
+        seen = self.env.user.sudo().cleaning_notifications_seen_at
+        if seen:
+            domain = domain + [('matched_at', '>', seen)]
+        return self.sudo().search_count(domain)
+
+    def _notify_low_match(self):
+        """Push this round to every manager with a phone registered.
+
+        NEVER raises, and that is the whole contract. This is called from
+        inside the upload, where the round has already been stored and scored;
+        a notification that cannot go out is a nuisance, and losing somebody's
+        round because Firebase was unreachable is not survivable. The same rule
+        _run_match_comparison keeps for the comparison itself.
+
+        Idempotent through low_match_notified_at. Worth being careful about:
+        this must be safe to call twice for one round, because a re-score can
+        push a round below the line that was above it an hour ago - that one
+        SHOULD notify - while a re-score that changes nothing must not tell
+        everybody again.
+        """
+        for recording in self:
+            try:
+                if recording.low_match_notified_at:
+                    continue
+                if not recording._is_low_match():
+                    continue
+
+                push = self.env['cleaning.push.config'].sudo()._get_for_company(
+                    recording.company_id)
+                # Stamped BEFORE the send, and deliberately so. This is at most
+                # once, not at least once: a send that fails is never retried.
+                #
+                # Both halves of that are chosen. Stamping even with push off
+                # or unconfigured means switching push on next month does not
+                # notify everybody about every old round at once. Stamping
+                # before rather than after means a half-delivered send - three
+                # managers told, the fourth timing out - cannot be replayed to
+                # the first three when the round is next re-scored.
+                #
+                # What makes that acceptable is the in-app list. It is derived
+                # from a search rather than from these stamps, so a round whose
+                # notification was lost is still sitting on the Notifications
+                # screen. Missing a buzz is recoverable; being told four times
+                # about the same round teaches people to ignore the lot.
+                recording.sudo().low_match_notified_at = fields.Datetime.now()
+                if not push or not push._ready():
+                    continue
+
+                devices = recording._low_match_devices()
+                if not devices:
+                    continue
+                recording._push_to_devices(push, devices)
+            except Exception:  # noqa: BLE001 - a round must survive this
+                _logger.exception(
+                    "Showroom Check: could not notify about round %s",
+                    recording.id)
+
+    def _low_match_devices(self):
+        """The phones that should hear about this round.
+
+        Started from the devices rather than from the manager group, which is
+        the cheaper end of the same question: only a phone that has registered
+        can be notified at all, and there is one row per phone against a user
+        table that may hold thousands. It also sidesteps having to name a field
+        on res.groups, which has been renamed more than once between versions.
+
+        has_group rather than a search on the group, so a manager who holds the
+        role through an implied group - an administrator, for instance - is
+        included exactly as they should be.
+        """
+        self.ensure_one()
+        devices = self.env['cleaning.push.device'].sudo().search([
+            ('company_id', '=', self.company_id.id),
+        ])
+        return devices.filtered(
+            lambda device: device.user_id.active and device.user_id.has_group(
+                'showroom_check.group_cleaning_manager'))
+
+    def _push_to_devices(self, push, devices):
+        """Group the phones by the language their owner reads.
+
+        The one place in this module where the server composes a sentence
+        rather than handing the app facts to word itself - src/api/cleaning.js
+        explains why that rule exists. It has to be broken here: the phone is
+        asleep, there is no app running to do the wording, and Android draws
+        what arrives. So the text is built per language instead, and a manager
+        who set their Odoo account to Arabic gets Arabic.
+        """
+        self.ensure_one()
+        by_lang = {}
+        for device in devices:
+            by_lang.setdefault(device.user_id.lang or 'en_US',
+                               self.env['cleaning.push.device'])
+            by_lang[device.user_id.lang or 'en_US'] |= device
+
+        for lang, group in by_lang.items():
+            env = self.env(context=dict(self.env.context, lang=lang))
+            title = env._("Low round: %(slot)s", slot=self.slot_id.name or '')
+            body = env._(
+                "%(score)s%% - worst view %(view)s, recorded by %(who)s.",
+                score=self.match_score,
+                view=self.match_worst_label or '',
+                who=self.user_id.name or '')
+            push._send_to_devices(
+                group, title, body, {'recordingId': self.id})
+
+    # ------------------------------------------------------------------
+    # What the app's Notifications screen reads
+    # ------------------------------------------------------------------
+    @api.model
+    def notification_feed(self, limit=50):
+        """Low rounds, newest first, for the app.
+
+        Facts only - no sentences. The app words its own rows, in the language
+        chosen on the phone rather than the one on the Odoo account.
+
+        The refusal for a non-manager lives HERE rather than in the app. A chip
+        that is not drawn is not access control: this is reachable over call_kw
+        by anybody with a session.
+        """
+        is_manager = self.env.user.has_group(
+            'showroom_check.group_cleaning_manager')
+        empty = {
+            'is_manager': False, 'threshold': 0, 'seen_at': False,
+            'unread_count': 0, 'rows': [],
+        }
+        if not is_manager:
+            return empty
+
+        config = self.env['cleaning.config'].sudo()._get_for_company()
+        if not config or not config.notify_low_match:
+            return dict(empty, is_manager=True)
+
+        seen = self.env.user.sudo().cleaning_notifications_seen_at
+        rows = self.sudo().search(
+            self._low_match_domain(config),
+            order='matched_at desc, id desc', limit=limit)
+        return {
+            'is_manager': True,
+            'threshold': config.notify_threshold,
+            'seen_at': fields.Datetime.to_string(seen) if seen else False,
+            'unread_count': self._low_match_unread_count(config),
+            'rows': [{
+                'id': row.id,
+                'slot_name': row.slot_id.name or '',
+                'slot_date': fields.Date.to_string(row.slot_date),
+                'user_name': row.user_id.name or '',
+                'match_score': row.match_score,
+                'match_worst_label': row.match_worst_label or '',
+                'matched_at': fields.Datetime.to_string(row.matched_at),
+                'is_unread': bool(not seen or row.matched_at > seen),
+            } for row in rows],
+        }
+
+    @api.model
+    def mark_notifications_seen(self):
+        """Everything scored up to now counts as read. Clears the badge.
+
+        sudo() on the user's own record: writing to res.users normally needs
+        rights nobody here has, and a person marking their OWN notifications
+        read cannot harm anything.
+        """
+        if not self.env.user.has_group(
+                'showroom_check.group_cleaning_manager'):
+            return False
+        self.env.user.sudo().cleaning_notifications_seen_at = (
+            fields.Datetime.now())
+        return True
 
     def action_recompute_match(self):
         """Re-score the photographs against the originals as they stand now.
