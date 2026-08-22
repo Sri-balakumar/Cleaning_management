@@ -1,10 +1,11 @@
 import base64
 import io
-from datetime import datetime
+from datetime import datetime, timedelta
 from unittest.mock import patch
 
 from PIL import Image
 
+from odoo import fields
 from odoo.tests.common import TransactionCase, tagged
 from odoo.tools import mute_logger
 
@@ -16,8 +17,8 @@ class TestPushNotifications(TransactionCase):
     """Telling a manager that a round came in low.
 
     Everything here mocks the network. What is being tested is which rounds
-    count as low, who hears about it, and that none of it can take a round
-    down - not whether Firebase is reachable.
+    count as low, who hears about it, how a batch is split, and that none of it
+    can take a round down - not whether Expo is reachable.
     """
 
     @classmethod
@@ -45,12 +46,10 @@ class TestPushNotifications(TransactionCase):
             'mon': True, 'tue': True, 'wed': True, 'thu': True,
             'fri': True, 'sat': True, 'sun': True,
         })
+        # No credential: on the Expo path the Firebase key lives in EAS.
         cls.push = cls.env['cleaning.push.config'].create({
             'company_id': cls.company.id,
             'enabled': True,
-            'project_id': 'test-project',
-            'service_account_key': '{"client_email": "a@b.com", '
-                                   '"private_key": "not-a-real-key"}',
         })
 
         cls.cleaner = cls.env['res.users'].create({
@@ -71,8 +70,9 @@ class TestPushNotifications(TransactionCase):
         })
         cls.device = cls.env['cleaning.push.device'].create({
             'user_id': cls.manager.id,
-            'token': 'device-token-1',
+            'token': 'ExponentPushToken[device-one]',
             'platform': 'android',
+            'project_id': 'project-a',
             'company_id': cls.company.id,
         })
 
@@ -80,10 +80,18 @@ class TestPushNotifications(TransactionCase):
     # Helpers
     # ------------------------------------------------------------------
     def _jpeg(self, seed=0):
-        image = Image.new('RGB', (64, 64))
+        """A real JPEG, comfortably over MIN_PHOTO_BYTES.
+
+        320x240 and full of noise, exactly as the main suite's _jpeg is and for
+        the same reason: _store_direction_shots silently DROPS anything under
+        the 2048-byte floor, so a smaller picture produces a round with no
+        shots at all and every assertion here fails for a reason that has
+        nothing to do with notifications.
+        """
+        image = Image.new('RGB', (320, 240))
         pixels = image.load()
-        for x in range(64):
-            for y in range(64):
+        for x in range(320):
+            for y in range(240):
                 pixels[x, y] = ((x * 3 + seed) % 256, (y * 5) % 256,
                                 (x + y + seed) % 256)
         buffer = io.BytesIO()
@@ -117,24 +125,34 @@ class TestPushNotifications(TransactionCase):
             # two up". That is what makes _compute_match leave the round with
             # no worst view at all.
             values.update({'same_view': 'yes', 'registered': False})
+        self.assertTrue(
+            recording.shot_ids,
+            "the test photograph was dropped - check it clears "
+            "MIN_PHOTO_BYTES")
         recording.shot_ids.write(values)
         recording.invalidate_recordset()
         return recording
 
-    def _sent(self):
-        """Patch the two network calls and collect what would have gone out."""
-        calls = []
+    def _sent(self, retire=None, config=None):
+        """Intercept the Expo batches and record what would have gone out.
 
-        def fake_send(project, token, device_token, title, body, data=None,
-                      timeout=None):
-            calls.append({
-                'project': project, 'device_token': device_token,
-                'title': title, 'body': body, 'data': data,
-            })
-            return {'ok': True, 'dead': False, 'error': None}
+        Returns (batches, patcher). One entry per REQUEST rather than per
+        message, which is what lets the mixed-project test assert that two
+        projects cost two requests rather than one.
+        """
+        batches = []
 
-        return calls, patch.object(provider, 'send', fake_send), \
-            patch.object(provider, 'access_token', lambda *a, **k: 'token')
+        def fake_batch(messages, timeout=None):
+            batches.append(messages)
+            tokens = [m['to'] for m in messages]
+            dead = [t for t in tokens if t in (retire or [])]
+            return {
+                'sent': len(tokens) - len(dead),
+                'retire': dead,
+                'config': config,
+            }
+
+        return batches, patch.object(provider, 'send_batch', fake_batch)
 
     # ------------------------------------------------------------------
     # Which rounds count
@@ -184,32 +202,75 @@ class TestPushNotifications(TransactionCase):
     # ------------------------------------------------------------------
     def test_a_low_round_notifies_the_manager(self):
         recording = self._round(45)
-        calls, send_patch, token_patch = self._sent()
-        with send_patch, token_patch:
+        batches, sending = self._sent()
+        with sending:
             recording._notify_low_match()
 
-        self.assertEqual(len(calls), 1)
-        self.assertEqual(calls[0]['device_token'], 'device-token-1')
-        self.assertEqual(calls[0]['data']['recordingId'], recording.id)
-        self.assertIn('45', calls[0]['body'])
+        self.assertEqual(len(batches), 1)
+        message = batches[0][0]
+        self.assertEqual(message['to'], 'ExponentPushToken[device-one]')
+        self.assertEqual(message['data']['recordingId'], recording.id)
+        self.assertEqual(message['channelId'], provider.CHANNEL_ID)
+        self.assertIn('45', message['body'])
         self.assertTrue(recording.low_match_notified_at)
 
     def test_a_good_round_notifies_nobody(self):
         recording = self._round(85)
-        calls, send_patch, token_patch = self._sent()
-        with send_patch, token_patch:
+        batches, sending = self._sent()
+        with sending:
             recording._notify_low_match()
-        self.assertEqual(calls, [])
+        self.assertEqual(batches, [])
         self.assertFalse(recording.low_match_notified_at)
 
     def test_the_same_round_is_never_notified_twice(self):
         """A re-score must not tell everybody again."""
         recording = self._round(45)
-        calls, send_patch, token_patch = self._sent()
-        with send_patch, token_patch:
+        batches, sending = self._sent()
+        with sending:
             recording._notify_low_match()
             recording._notify_low_match()
-        self.assertEqual(len(calls), 1)
+        self.assertEqual(len(batches), 1)
+
+    def test_two_projects_are_sent_as_two_requests(self):
+        """The lesson kra_kpi_module learned the hard way.
+
+        Expo rejects a request whose messages span two EAS projects, and
+        rejects the WHOLE request - so one token left behind by an older
+        project would take every other manager's notification with it. They
+        have to go as separate requests.
+        """
+        second = self.env['res.users'].create({
+            'name': 'Other Manager',
+            'login': 'push_test_manager_other',
+            'company_id': self.company.id,
+            'company_ids': [(6, 0, [self.company.id])],
+            'group_ids': [(4, self.env.ref(
+                'showroom_check.group_cleaning_manager').id)],
+        })
+        self.env['cleaning.push.device'].create({
+            'user_id': second.id,
+            'token': 'ExponentPushToken[device-two]',
+            'platform': 'android',
+            'project_id': 'project-b',
+            'company_id': self.company.id,
+        })
+
+        recording = self._round(45)
+        batches, sending = self._sent()
+        with sending:
+            recording._notify_low_match()
+
+        self.assertEqual(
+            len(batches), 2,
+            "two EAS projects must not share one Expo request")
+        for batch in batches:
+            projects = {
+                self.env['cleaning.push.device'].search(
+                    [('token', '=', m['to'])]).project_id
+                for m in batch
+            }
+            self.assertEqual(len(projects), 1,
+                             "a batch mixed two projects")
 
     def test_a_round_is_stamped_even_when_push_is_off(self):
         """Otherwise switching push on next month floods every manager.
@@ -220,40 +281,70 @@ class TestPushNotifications(TransactionCase):
         """
         self.push.enabled = False
         recording = self._round(45)
-        calls, send_patch, token_patch = self._sent()
-        with send_patch, token_patch:
+        batches, sending = self._sent()
+        with sending:
             recording._notify_low_match()
-        self.assertEqual(calls, [])
+        self.assertEqual(batches, [])
         self.assertTrue(recording.low_match_notified_at)
 
     @mute_logger('odoo.addons.showroom_check.models.cleaning_recording')
-    def test_a_round_survives_firebase_being_broken(self):
+    def test_a_round_survives_expo_being_broken(self):
         """The contract. A notification that cannot go out is a nuisance;
-        losing somebody's round because Google was unreachable is not."""
+        losing somebody's round because Expo was unreachable is not."""
         recording = self._round(45)
 
         def explode(*args, **kwargs):
             raise provider.PushError("no")
 
-        with patch.object(provider, 'access_token', explode):
+        with patch.object(provider, 'send_batch', explode):
             recording._notify_low_match()
 
         self.assertTrue(recording.exists())
         self.assertEqual(recording.match_score, 45)
 
     @mute_logger('odoo.addons.showroom_check.models.cleaning_push_config')
-    def test_a_phone_firebase_says_is_gone_is_removed(self):
+    def test_a_phone_expo_says_is_gone_is_retired(self):
+        """Retired, not deleted: the row is a record that it existed."""
         recording = self._round(45)
-
-        def dead(*args, **kwargs):
-            return {'ok': False, 'dead': True, 'error': 'UNREGISTERED'}
-
-        with patch.object(provider, 'send', dead), \
-                patch.object(provider, 'access_token', lambda *a, **k: 't'):
+        _batches, sending = self._sent(
+            retire=['ExponentPushToken[device-one]'])
+        with sending:
             recording._notify_low_match()
 
-        self.assertFalse(self.device.exists(),
-                         "a token Firebase reports as gone must not be kept")
+        self.device.invalidate_recordset()
+        self.assertFalse(self.device.active,
+                         "a token Expo reports as gone must be retired")
+        self.assertTrue(
+            self.device.with_context(active_test=False).exists(),
+            "and the row must survive rather than be deleted")
+
+    def test_signing_in_again_un_retires_a_phone(self):
+        """The token was just minted, so it is demonstrably alive."""
+        self.device.active = False
+        self.env['cleaning.push.device'].with_user(
+            self.manager).register_device(
+                'ExponentPushToken[device-one]', 'android')
+        self.device.invalidate_recordset()
+        self.assertTrue(self.device.active)
+
+    # ------------------------------------------------------------------
+    # The provider's own reading of Expo's answer
+    # ------------------------------------------------------------------
+    def test_a_body_too_long_for_a_banner_is_trimmed(self):
+        long_body = 'x' * 400
+        message = provider.build_message('tok', 'Title', long_body)
+        self.assertLessEqual(len(message['body']), provider.MAX_BODY_CHARS)
+        self.assertTrue(message['body'].endswith('...'))
+
+    def test_a_short_body_is_left_alone(self):
+        self.assertEqual(
+            provider.build_message('tok', 'T', 'Just so')['body'], 'Just so')
+
+    def test_the_message_carries_the_channel_and_high_priority(self):
+        message = provider.build_message('tok', 'T', 'B', {'recordingId': 7})
+        self.assertEqual(message['channelId'], provider.CHANNEL_ID)
+        self.assertEqual(message['priority'], 'high')
+        self.assertEqual(message['data']['recordingId'], 7)
 
     # ------------------------------------------------------------------
     # The in-app list
@@ -310,7 +401,16 @@ class TestPushNotifications(TransactionCase):
         Recording.mark_notifications_seen()
         self.assertEqual(Recording.notification_feed()['unread_count'], 0)
 
-        self._round(30, day=18)
+        later = self._round(30, day=18)
+        # Pushed a minute into the future ON PURPOSE. matched_at is stamped
+        # with the real clock at comparison time, not from slot_date, and Odoo
+        # datetimes are second-resolution - so the whole of this test runs
+        # inside the same second as mark_notifications_seen, and "arrived after
+        # you last looked" is a strict >. Without this the assertion measures
+        # how fast the machine is rather than whether the count works.
+        later.shot_ids.write({
+            'matched_at': fields.Datetime.now() + timedelta(minutes=1)})
+        later.invalidate_recordset()
         self.assertEqual(Recording.notification_feed()['unread_count'], 1)
 
     def test_a_plain_user_cannot_mark_anything_seen(self):
@@ -322,19 +422,22 @@ class TestPushNotifications(TransactionCase):
     # ------------------------------------------------------------------
     def test_a_manager_can_register_a_phone(self):
         Device = self.env['cleaning.push.device'].with_user(self.manager)
-        self.assertTrue(Device.register_device('new-token'))
-        self.assertTrue(self.env['cleaning.push.device'].sudo().search([
-            ('token', '=', 'new-token'),
-            ('user_id', '=', self.manager.id),
-        ]))
+        self.assertTrue(Device.register_device(
+            'ExponentPushToken[new]', 'android',
+            device='Galaxy Tab A', project_id='project-a'))
+        row = self.env['cleaning.push.device'].sudo().search([
+            ('token', '=', 'ExponentPushToken[new]')])
+        self.assertEqual(row.user_id, self.manager)
+        self.assertEqual(row.device, 'Galaxy Tab A')
+        self.assertEqual(row.project_id, 'project-a')
 
     def test_a_plain_user_registers_nothing(self):
         """Only managers are ever notified, so only their phones are worth
         keeping the address of."""
         Device = self.env['cleaning.push.device'].with_user(self.cleaner)
-        self.assertFalse(Device.register_device('user-token'))
+        self.assertFalse(Device.register_device('ExponentPushToken[user]'))
         self.assertFalse(self.env['cleaning.push.device'].sudo().search([
-            ('token', '=', 'user-token')]))
+            ('token', '=', 'ExponentPushToken[user]')]))
 
     def test_a_shared_phone_moves_to_whoever_signed_in(self):
         """Otherwise it keeps notifying whoever used it last week."""
@@ -347,20 +450,21 @@ class TestPushNotifications(TransactionCase):
                 'showroom_check.group_cleaning_manager').id)],
         })
         self.env['cleaning.push.device'].with_user(second).register_device(
-            'device-token-1')
+            'ExponentPushToken[device-one]')
 
         self.device.invalidate_recordset()
         self.assertEqual(self.device.user_id, second)
         self.assertEqual(self.env['cleaning.push.device'].sudo().search_count(
-            [('token', '=', 'device-token-1')]), 1)
+            [('token', '=', 'ExponentPushToken[device-one]')]), 1)
 
     def test_signing_out_forgets_the_phone(self):
         Device = self.env['cleaning.push.device'].with_user(self.manager)
-        Device.unregister_device('device-token-1')
-        self.assertFalse(self.device.exists())
+        Device.unregister_device('ExponentPushToken[device-one]')
+        self.assertFalse(
+            self.device.with_context(active_test=False).exists())
 
     def test_only_your_own_phones_are_visible(self):
-        """A device token is the address a phone is reachable at. A colleague
+        """A push token is the address a phone is reachable at. A colleague
         holding the manager role has no business reading it."""
         second = self.env['res.users'].create({
             'name': 'Nosy Manager',
@@ -373,29 +477,16 @@ class TestPushNotifications(TransactionCase):
         visible = self.env['cleaning.push.device'].with_user(second).search([])
         self.assertNotIn(self.device, visible)
 
-    # ------------------------------------------------------------------
-    # The message itself
-    # ------------------------------------------------------------------
-    def test_the_message_carries_a_notification_block(self):
-        """Data-only would not be drawn while the app is closed, which is
-        exactly when somebody needs telling."""
-        message = provider.build_message(
-            'tok', 'Title', 'Body', {'recordingId': 7})['message']
-        self.assertEqual(message['notification']['title'], 'Title')
-        self.assertEqual(message['android']['priority'], 'high')
-        self.assertEqual(
-            message['android']['notification']['channel_id'],
-            provider.CHANNEL_ID)
-
-    def test_the_data_payload_is_all_strings(self):
-        """FCM rejects a number in `data` with a flat 400 that says nothing
-        about which key was at fault."""
-        message = provider.build_message(
-            'tok', 'T', 'B', {'recordingId': 7})['message']
-        self.assertEqual(message['data']['recordingId'], '7')
-
-    def test_the_title_and_body_are_not_repeated_in_data(self):
-        """Sending them in both places draws the notification twice."""
-        message = provider.build_message('tok', 'T', 'B', {})['message']
-        self.assertNotIn('title', message['data'])
-        self.assertNotIn('body', message['data'])
+    def test_devices_group_by_project(self):
+        devices = self.env['cleaning.push.device'].sudo().create([
+            {'user_id': self.manager.id, 'token': 'ExponentPushToken[a1]',
+             'project_id': 'p1', 'company_id': self.company.id},
+            {'user_id': self.manager.id, 'token': 'ExponentPushToken[a2]',
+             'project_id': 'p1', 'company_id': self.company.id},
+            {'user_id': self.manager.id, 'token': 'ExponentPushToken[b1]',
+             'project_id': 'p2', 'company_id': self.company.id},
+        ])
+        groups = devices._grouped_by_project()
+        self.assertEqual(sorted(groups), ['p1', 'p2'])
+        self.assertEqual(len(groups['p1']), 2)
+        self.assertEqual(len(groups['p2']), 1)

@@ -1,4 +1,3 @@
-import json
 import logging
 
 from odoo import api, fields, models
@@ -10,12 +9,18 @@ _logger = logging.getLogger(__name__)
 
 
 class CleaningPushConfig(models.Model):
-    """Credentials for sending a push notification to a manager's phone.
+    """Whether low rounds are pushed to managers' phones, and how patiently.
 
-    Its own model rather than more fields on cleaning.config, following
-    cleaning.ai.config and for the same two reasons: this part is optional, and
-    it holds a secret. Whoever sets up cleaning rounds is not necessarily the
-    person who should be able to read a Firebase service account key.
+    Deliberately holds no credential. On the Expo path the Firebase service
+    account key lives in the EAS account rather than here, uploaded once with
+    `eas credentials`, and Expo authenticates to FCM on this server's behalf.
+    Odoo needs nothing secret to ask Expo to deliver.
+
+    That is a trade rather than a free win: Expo's push endpoint takes no
+    Authorization header, so anybody holding a device's Expo token could push
+    to it. kra_kpi_module accepts the same trade, and matching it keeps one
+    pattern across both apps. Expo's push-security access token can be added
+    later without changing anything else here.
     """
     _name = 'cleaning.push.config'
     _description = 'Cleaning Push Notification Settings'
@@ -28,25 +33,9 @@ class CleaningPushConfig(models.Model):
 
     enabled = fields.Boolean(
         string='Send push notifications', default=False,
-        help="Off until the credentials below are filled in and Test Push has "
-             "worked.\n\n"
-             "With this off, low rounds still appear in the app's "
-             "Notifications list. Nothing is ever sent to Google.")
+        help="With this off, low rounds still appear in the app's "
+             "Notifications list. Nothing is sent to anybody's phone.")
 
-    project_id = fields.Char(
-        string='Firebase Project ID',
-        help="From the Firebase console, under Project Settings.\n\n"
-             "Leave it empty to use the project the service account file "
-             "already names, which is almost always the right one.")
-    service_account_key = fields.Text(
-        string='Service Account Key (JSON)',
-        groups='base.group_system',
-        help="The WHOLE contents of the private key file, pasted in.\n\n"
-             "Firebase console > Project Settings > Service Accounts > "
-             "Generate new private key. This is not the same file as "
-             "google-services.json, which belongs in the app rather than "
-             "here - this one is a secret and lets a server send "
-             "notifications as you.")
     timeout_seconds = fields.Integer(
         string='Give Up After (seconds)', default=10,
         help="Kept short on purpose. Sending happens while a round is being "
@@ -68,109 +57,54 @@ class CleaningPushConfig(models.Model):
         company = company or self.env.company
         return self.search([('company_id', '=', company.id)], limit=1)
 
-    def _key_dict(self):
-        """The service account file, parsed.
-
-        Raises PushError with something a person can act on. A key that will
-        not parse is by far the most common setup mistake - people paste the
-        path to the file, or half of it.
-        """
-        self.ensure_one()
-        raw = (self.sudo().service_account_key or '').strip()
-        if not raw:
-            raise provider.PushError(
-                "No service account key has been set. Paste the contents of "
-                "the JSON file from Firebase into the Push settings.")
-        try:
-            parsed = json.loads(raw)
-        except ValueError:
-            raise provider.PushError(
-                "The service account key is not valid JSON. Paste the whole "
-                "contents of the file - it should start with a { and end with "
-                "a } - rather than its filename or part of it.")
-        if not isinstance(parsed, dict):
-            raise provider.PushError(
-                "The service account key should be a JSON object.")
-        return parsed
-
-    def _fcm_project_id(self, key_dict):
-        """Which Firebase project to post to.
-
-        The service account file already names its own project, so the field is
-        a manual override rather than something anybody has to fill in. Taking
-        it from the key by default also removes the mismatch where a key from
-        one project is used with another project's id, which fails with a 404
-        that explains nothing.
-        """
-        self.ensure_one()
-        return (self.project_id or '').strip() or key_dict.get('project_id')
-
     def _ready(self):
-        """Can this actually send? Cheap enough to call on every round."""
+        """Can this send? Cheap enough to call on every round."""
         self.ensure_one()
-        return bool(self.enabled and self.sudo().service_account_key)
-
-    def write(self, vals):
-        """Forget any cached access token when the credentials change.
-
-        Without this, editing the service account and pressing Test Push would
-        keep using the token minted from the OLD key for up to an hour, and
-        report a success that says nothing about the key just pasted.
-        """
-        if 'service_account_key' in vals:
-            for config in self:
-                try:
-                    provider.forget_cached_token(config._key_dict())
-                except provider.PushError:
-                    # The key on the way out was unreadable, so there is no
-                    # cached token under it to forget. Not worth failing a save.
-                    pass
-        return super().write(vals)
+        return bool(self.enabled)
 
     # ------------------------------------------------------------------
     # Sending
     # ------------------------------------------------------------------
     def _send_to_devices(self, devices, title, body, data=None):
-        """Push one message to a set of devices. Returns how many got it.
+        """Push one message to a set of phones. Returns how many got it.
 
-        Dead tokens are deleted as they are discovered: FCM tells us when a
-        phone is gone, and a token nobody removes is a request wasted on every
-        future round, forever.
+        Batched per EAS project, because Expo rejects a request whose messages
+        span two projects and delivers to NOBODY in it - so a single token left
+        behind by an older projectId would otherwise cost every other manager
+        their notification. kra_kpi_module carries a long comment about
+        discovering this the hard way.
 
-        Never raises. The caller is usually in the middle of an upload.
+        Phones Expo reports as DeviceNotRegistered are retired rather than
+        deleted, so the row survives as a record that this device existed.
+
+        Never raises: the caller is usually in the middle of an upload.
         """
         self.ensure_one()
         if not devices:
             return 0
-
-        key = self._key_dict()
-        project = self._fcm_project_id(key)
-        if not project:
-            raise provider.PushError(
-                "No Firebase project id, and the service account file does "
-                "not name one either.")
         timeout = self.timeout_seconds or provider.DEFAULT_TIMEOUT
-        token = provider.access_token(key, timeout=timeout)
 
         sent = 0
-        dead = self.env['cleaning.push.device']
-        for device in devices:
-            result = provider.send(
-                project, token, device.token, title, body, data,
-                timeout=timeout)
-            if result['ok']:
-                sent += 1
-            elif result['dead']:
-                dead |= device
-            else:
-                _logger.warning(
-                    "Showroom Check: push to device %s failed: %s",
-                    device.id, result['error'])
-        if dead:
+        retire = []
+        for _project, group in devices._grouped_by_project().items():
+            tokens = group.mapped('token')
+            for start in range(0, len(tokens), provider.MAX_BATCH):
+                chunk = tokens[start:start + provider.MAX_BATCH]
+                messages = [
+                    provider.build_message(token, title, body, data)
+                    for token in chunk
+                ]
+                result = provider.send_batch(messages, timeout=timeout)
+                sent += result['sent']
+                retire.extend(result['retire'])
+
+        if retire:
+            gone = self.env['cleaning.push.device'].sudo().search([
+                ('token', 'in', retire)])
             _logger.info(
-                "Showroom Check: removing %s device(s) Firebase reports as "
-                "gone.", len(dead))
-            dead.sudo().unlink()
+                "Showroom Check: retiring %s phone(s) Expo reports as gone.",
+                len(gone))
+            gone.write({'active': False})
         return sent
 
     # ------------------------------------------------------------------
@@ -180,7 +114,7 @@ class CleaningPushConfig(models.Model):
         """Send a notification to whoever pressed the button.
 
         Deliberately to the caller's own phones and nobody else's: testing
-        credentials should not put a message on somebody else's screen.
+        should not put a message on somebody else's screen.
         """
         self.ensure_one()
         devices = self.env['cleaning.push.device'].sudo().search([
@@ -203,8 +137,9 @@ class CleaningPushConfig(models.Model):
 
         if not sent:
             raise UserError(self.env._(
-                "The message was not accepted for any of this account's "
-                "phones. The server log has the reason from Firebase."))
+                "Expo accepted the message for none of this account's phones. "
+                "The server log says why - the usual cause is that the "
+                "Firebase key on EAS does not match the build."))
         return {
             'type': 'ir.actions.client',
             'tag': 'display_notification',

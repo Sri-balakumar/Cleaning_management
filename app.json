@@ -28,7 +28,11 @@
       "package": "com.alphalize.showroomcheck369",
       "softwareKeyboardLayoutMode": "resize",
       "userInterfaceStyle": "light",
-      "googleServicesFile": "./google-services.json"
+      "googleServicesFile": "./google-services.json",
+      "permissions": [
+        "android.permission.CAMERA",
+        "android.permission.RECORD_AUDIO"
+      ]
     },
     "web": {
       "favicon": "./assets/favicon.png",
@@ -76,6 +80,13 @@
           }
         }
       ]
-    ]
+    ],
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "9ea1932c-e894-4378-b528-a67ae12ae950"
+      }
+    },
+    "owner": "vavinix"
   }
 }

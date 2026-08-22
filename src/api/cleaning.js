@@ -303,17 +303,24 @@ export const markNotificationsSeen = (baseUrl) =>
 /**
  * Tell the server this phone can be notified.
  *
- * The token comes from Firebase by way of expo-notifications; the server keeps
- * it against the signed-in user and sends low rounds to it. A regular user
- * calling this is a silent no-op server-side -- only managers are ever
- * notified, so only their phones are worth storing.
+ * The token comes from Expo, which relays to Firebase on the server's behalf.
+ * The server keeps it against the signed-in user and sends low rounds to it. A
+ * regular user calling this is a silent no-op server-side -- only managers are
+ * ever notified, so only their phones are worth storing.
  */
-export const registerDevice = (baseUrl, token, platform = 'android') =>
+export const registerDevice = (baseUrl, token, platform = 'android', extra = {}) =>
   rpc(baseUrl, '/web/dataset/call_kw', {
     model: 'cleaning.push.device',
     method: 'register_device',
     args: [token, platform],
-    kwargs: {},
+    // `device` is only so Registered Phones reads as "Galaxy Tab A" rather
+    // than a token fragment. `project_id` is load-bearing: the server groups
+    // its Expo requests by it, because Expo rejects a request spanning two
+    // projects and rejects the whole of it.
+    kwargs: {
+      device: extra.device || '',
+      project_id: extra.projectId || '',
+    },
   });
 
 /** Forget this phone, on sign-out. */

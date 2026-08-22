@@ -36,32 +36,23 @@
                         </group>
                     </group>
 
-                    <group string="Firebase" invisible="not enabled">
+                    <group string="Delivery" invisible="not enabled">
                         <group>
-                            <field name="project_id"
-                                   placeholder="Taken from the key file if left empty"/>
                             <field name="timeout_seconds"/>
                         </group>
                     </group>
 
-                    <group string="Service Account Key" invisible="not enabled"
-                           groups="base.group_system">
-                        <field name="service_account_key" nolabel="1"
-                               placeholder='{ "type": "service_account", "project_id": "...", ... }'/>
-                    </group>
-
                     <div class="alert alert-warning" role="alert"
-                         invisible="not enabled" groups="base.group_system">
-                        <strong>Two different files, and they are easy to mix up.</strong>
+                         invisible="not enabled">
+                        <strong>The Firebase key is not kept here.</strong>
+                        Notifications go out through Expo, which delivers them over
+                        Firebase on this server's behalf - so the service account key
+                        is uploaded to EAS with
+                        <em>eas credentials</em>, not pasted into Odoo.
                         <br/>
-                        <strong>google-services.json</strong> identifies the app and belongs
-                        in the app's own source, not here.
-                        <br/>
-                        <strong>The service account key</strong> - the one that goes in the
-                        box above - is a secret. Anybody holding it can send notifications
-                        as you. Get it from the Firebase console under
-                        <em>Project Settings &gt; Service Accounts &gt; Generate new
-                        private key</em>, and paste the whole file.
+                        If notifications stop, that is where to look: a
+                        <em>MismatchSenderId</em> in the server log means the key on EAS
+                        no longer matches the build.
                     </div>
 
                     <div class="alert alert-info" role="alert"
@@ -83,7 +74,6 @@
             <list string="Push Notification Settings">
                 <field name="name"/>
                 <field name="company_id" groups="base.group_multi_company"/>
-                <field name="project_id"/>
                 <field name="enabled" widget="boolean_toggle"/>
             </list>
         </field>
@@ -99,8 +89,10 @@
         <field name="arch" type="xml">
             <list string="Registered Phones" create="false" edit="false">
                 <field name="user_id"/>
+                <field name="device"/>
                 <field name="platform"/>
                 <field name="last_seen_at"/>
+                <field name="active" widget="boolean_toggle"/>
                 <field name="company_id" groups="base.group_multi_company"/>
             </list>
         </field>
