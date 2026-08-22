@@ -283,19 +283,38 @@ export const fetchMissedRounds = (baseUrl, { limit = 120 } = {}) =>
  * slot_name, slot_date, user_name, match_score, match_worst_label, matched_at,
  * is_unread }] }.
  */
-export const fetchNotifications = (baseUrl, { limit = 50 } = {}) =>
+export const fetchNotifications = (baseUrl, { limit = 50, only = 'all' } = {}) =>
   rpc(baseUrl, '/web/dataset/call_kw', {
     model: 'cleaning.recording',
     method: 'notification_feed',
     args: [],
-    kwargs: { limit },
+    kwargs: { limit, only },
   });
 
-/** Everything scored up to now counts as read, which clears the badge. */
-export const markNotificationsSeen = (baseUrl) =>
+/**
+ * Mark rounds read, or put them back to unread.
+ *
+ * Both directions on purpose: a bell that can only be emptied is one people
+ * stop trusting, and opening a round by accident should not lose the one thing
+ * that said it still needed looking at.
+ *
+ * Read state lives on the server rather than the phone. Kept here it would be
+ * per DEVICE -- read on the tablet, still unread on the phone, and gone
+ * entirely after a reinstall.
+ */
+export const markNotificationRead = (baseUrl, ids, read = true) =>
   rpc(baseUrl, '/web/dataset/call_kw', {
     model: 'cleaning.recording',
-    method: 'mark_notifications_seen',
+    method: 'mark_notification_read',
+    args: [ids],
+    kwargs: { read },
+  });
+
+/** Empty the bell in one go. */
+export const markAllNotificationsRead = (baseUrl) =>
+  rpc(baseUrl, '/web/dataset/call_kw', {
+    model: 'cleaning.recording',
+    method: 'mark_all_notifications_read',
     args: [],
     kwargs: {},
   });

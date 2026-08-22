@@ -1,15 +1,20 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useFocusEffect, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { AppError } from '../src/api/errors';
-import { fetchNotifications, markNotificationsSeen } from '../src/api/cleaning';
+import {
+  fetchNotifications,
+  markAllNotificationsRead,
+  markNotificationRead,
+} from '../src/api/cleaning';
 import { useAuth } from '../src/auth/AuthContext';
 import { RequireAuth } from '../src/auth/RequireAuth';
 import { ErrorBanner } from '../src/components/ErrorBanner';
 import { GradientBackground, GradientOrbs } from '../src/components/GradientBackground';
+import { SectionTabs } from '../src/components/SectionTabs';
 import { formatGroupDate } from '../src/cleaning/dates';
 import { translateError, useT } from '../src/i18n/LanguageProvider';
 import { colors, radius, spacing, typography } from '../src/theme';
@@ -33,13 +38,16 @@ function groupByDate(rows) {
  *
  * The durable half of the notification. A push tells somebody now and is gone
  * the moment it is swiped away -- or never arrives at all, on a phone that was
- * off, or one that never registered. This is what is still here afterwards,
- * and it is why the list exists rather than push alone.
+ * off, or one that never registered. This is what is still here afterwards.
  *
  * Derived, not stored: the server searches for rounds under the threshold
  * rather than replaying rows it wrote at the time. Move the threshold and this
- * screen re-answers for the whole history, which is the same trade the verdict
- * bands make by staying unstored on the server.
+ * screen re-answers for the whole history. Only which rounds this user has
+ * READ is stored, because that is the one thing no search can work out.
+ *
+ * Nothing is marked read just by arriving here. Opening the bell is not the
+ * same as having dealt with what is in it, and a list that empties itself on
+ * sight makes the unread filter useless the moment it is used.
  */
 export default function NotificationsRoute() {
   return (
@@ -56,34 +64,84 @@ function NotificationsScreen() {
   const { t, rtlRow, rtlText } = useT();
 
   const [feed, setFeed] = useState(null);
+  const [filter, setFilter] = useState('unread');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
-  const load = useCallback(async () => {
-    setError(null);
+  const load = useCallback(
+    async (only = filter) => {
+      setError(null);
+      try {
+        setFeed(await fetchNotifications(connection.baseUrl, { only }));
+      } catch (e) {
+        setError(translateError(t, AppError.from(e)));
+      } finally {
+        setLoading(false);
+      }
+    },
+    [connection, filter, t],
+  );
+
+  useEffect(() => {
+    void load(filter);
+  }, [filter, load]);
+
+  // Coming back from a round should show it as read, since opening it is
+  // exactly what marks it.
+  useFocusEffect(
+    useCallback(() => {
+      void load(filter);
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [filter]),
+  );
+
+  const onRow = useCallback(
+    async (item) => {
+      // Marked read on the way out rather than on return, so the round is
+      // already read by the time its detail screen is drawn. A failure here
+      // must not block opening it -- being unable to tick something off is a
+      // far smaller problem than being unable to look at it.
+      if (item.is_unread) {
+        markNotificationRead(connection.baseUrl, [item.id]).catch(() => {});
+      }
+      router.push(`/comparison/${item.id}`);
+    },
+    [connection, router],
+  );
+
+  const onToggleRead = useCallback(
+    async (item) => {
+      try {
+        await markNotificationRead(connection.baseUrl, [item.id], item.is_unread);
+        await load(filter);
+      } catch (e) {
+        setError(translateError(t, AppError.from(e)));
+      }
+    },
+    [connection, filter, load, t],
+  );
+
+  const onMarkAll = useCallback(async () => {
     try {
-      const result = await fetchNotifications(connection.baseUrl);
-      setFeed(result || null);
+      await markAllNotificationsRead(connection.baseUrl);
+      await load(filter);
     } catch (e) {
       setError(translateError(t, AppError.from(e)));
-    } finally {
-      setLoading(false);
     }
-  }, [connection, t]);
+  }, [connection, filter, load, t]);
 
-  useEffect(() => {
-    void load();
-  }, [load]);
-
-  // Marked read once, on arrival, rather than per row. Opening the screen IS
-  // having seen them; asking somebody to tick off each round would be work for
-  // its own sake. Deliberately not awaited into the render path -- a failed
-  // mark must not stop the list being shown.
-  useEffect(() => {
-    void markNotificationsSeen(connection.baseUrl).catch(() => {});
-  }, [connection]);
+  const tabs = useMemo(
+    () => [
+      { key: 'unread', label: `${t.filterUnread} (${feed?.unread_count ?? 0})` },
+      { key: 'read', label: `${t.filterRead} (${feed?.read_count ?? 0})` },
+      { key: 'all', label: `${t.filterAll} (${feed?.total_count ?? 0})` },
+    ],
+    [feed, t],
+  );
 
   const groups = useMemo(() => groupByDate(feed?.rows || []), [feed]);
+  const emptyText =
+    filter === 'read' ? t.noReadRounds : filter === 'unread' ? t.noUnreadRounds : t.noLowRoundsBody;
 
   return (
     <View style={styles.screen}>
@@ -94,6 +152,14 @@ function NotificationsScreen() {
             <Ionicons name="chevron-back" size={22} color={colors.white} />
           </Pressable>
           <Text style={[styles.title, rtlText]}>{t.lowRounds}</Text>
+          <View style={styles.spacer} />
+          {/* Only offered when it would do something. A "mark all read" that
+              is already true reads as a broken button. */}
+          {feed?.unread_count ? (
+            <Pressable onPress={onMarkAll} hitSlop={10} accessibilityRole="button">
+              <Text style={styles.markAll}>{t.markAllRead}</Text>
+            </Pressable>
+          ) : null}
         </View>
         {feed?.threshold ? (
           <Text style={[styles.subtitle, rtlText]}>
@@ -101,6 +167,10 @@ function NotificationsScreen() {
           </Text>
         ) : null}
       </GradientBackground>
+
+      <View style={styles.tabs}>
+        <SectionTabs tabs={tabs} value={filter} onChange={setFilter} />
+      </View>
 
       {error ? <ErrorBanner message={error} /> : null}
 
@@ -110,7 +180,7 @@ function NotificationsScreen() {
         contentContainerStyle={[styles.body, { paddingBottom: spacing.xxxl + insets.bottom }]}
         showsVerticalScrollIndicator={false}
         refreshing={loading}
-        onRefresh={load}
+        onRefresh={() => load(filter)}
         ListEmptyComponent={
           loading ? (
             <ActivityIndicator color={colors.primary} style={styles.spinner} />
@@ -118,7 +188,7 @@ function NotificationsScreen() {
             <View style={styles.empty}>
               <Text style={styles.emptyIcon}>✅</Text>
               <Text style={styles.emptyTitle}>{t.noLowRounds}</Text>
-              <Text style={[styles.emptyText, rtlText]}>{t.noLowRoundsBody}</Text>
+              <Text style={[styles.emptyText, rtlText]}>{emptyText}</Text>
             </View>
           )
         }
@@ -128,15 +198,16 @@ function NotificationsScreen() {
             {group.items.map((item) => (
               <Pressable
                 key={item.id}
-                onPress={() => router.push(`/comparison/${item.id}`)}
+                onPress={() => onRow(item)}
                 accessibilityRole="button"
                 style={[styles.row, rtlRow]}
               >
-                {/* Filled while unread, hollow once seen. The whole difference
-                    a badge count is counting, said on the row itself. */}
-                <View style={[styles.dot, item.is_unread ? null : styles.dotSeen]} />
+                <View style={[styles.dot, item.is_unread ? null : styles.dotRead]} />
                 <View style={styles.rowText}>
-                  <Text style={[styles.rowTitle, rtlText]} numberOfLines={1}>
+                  <Text
+                    style={[styles.rowTitle, item.is_unread && styles.rowTitleUnread, rtlText]}
+                    numberOfLines={1}
+                  >
                     {item.slot_name || t.round}
                   </Text>
                   <Text style={[styles.rowMeta, rtlText]} numberOfLines={1}>
@@ -144,7 +215,21 @@ function NotificationsScreen() {
                   </Text>
                 </View>
                 <Text style={styles.score}>{`${item.match_score}%`}</Text>
-                <Ionicons name="chevron-forward" size={16} color={colors.textMuted} />
+                {/* Both directions. A bell that can only be emptied is one
+                    people stop trusting: opening a round by accident should
+                    not lose the one thing saying it still needs a look. */}
+                <Pressable
+                  onPress={() => onToggleRead(item)}
+                  hitSlop={10}
+                  accessibilityRole="button"
+                  accessibilityLabel={item.is_unread ? t.markRead : t.markUnread}
+                >
+                  <Ionicons
+                    name={item.is_unread ? 'mail-unread-outline' : 'mail-open-outline'}
+                    size={18}
+                    color={colors.textMuted}
+                  />
+                </Pressable>
               </Pressable>
             ))}
           </View>
@@ -168,12 +253,11 @@ const styles = StyleSheet.create({
   },
   headerRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
   title: { fontSize: 22, fontWeight: '700', color: colors.white, letterSpacing: -0.4 },
-  subtitle: {
-    marginTop: spacing.xs,
-    fontSize: 13,
-    color: colors.onGradientMuted,
-  },
+  spacer: { flex: 1 },
+  markAll: { fontSize: 13, fontWeight: '700', color: colors.white },
+  subtitle: { marginTop: spacing.xs, fontSize: 13, color: colors.onGradientMuted },
 
+  tabs: { paddingHorizontal: spacing.xl, paddingTop: spacing.md },
   body: { padding: spacing.xl, gap: spacing.md },
   spinner: { marginTop: spacing.xxxl },
 
@@ -189,9 +273,10 @@ const styles = StyleSheet.create({
   groupTitle: { ...typography.overline },
   row: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
   dot: { width: 8, height: 8, borderRadius: 4, backgroundColor: colors.warning },
-  dotSeen: { backgroundColor: 'transparent', borderWidth: 1, borderColor: colors.border },
+  dotRead: { backgroundColor: 'transparent', borderWidth: 1, borderColor: colors.border },
   rowText: { flex: 1 },
   rowTitle: { ...typography.body },
+  rowTitleUnread: { fontWeight: '800' },
   rowMeta: { ...typography.caption },
   score: { fontSize: 15, fontWeight: '800', color: colors.warning },
 

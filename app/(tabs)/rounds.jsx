@@ -21,6 +21,7 @@ import { Avatar } from '../../src/components/Avatar';
 import { useDialog, useTimeoutDialog } from '../../src/components/AppDialog';
 import { ErrorBanner } from '../../src/components/ErrorBanner';
 import { GradientBackground, GradientOrbs } from '../../src/components/GradientBackground';
+import { NotificationBell } from '../../src/components/NotificationBell';
 import { OpenRoundCard } from '../../src/components/OpenRoundCard';
 import { ProgressRing } from '../../src/components/ProgressRing';
 import { PrimaryButton } from '../../src/components/PrimaryButton';
@@ -243,6 +244,18 @@ function RoundsScreen() {
                 <Ionicons name="settings-outline" size={20} color={colors.white} />
               </Pressable>
             ) : null}
+            {/* Managers only, and not drawn at all otherwise. How many rounds
+                scored badly is not something to put in front of the people
+                being measured, even as a number they cannot open. The server
+                agrees rather than trusting this: low_match_unread comes back
+                as a flat 0 for anybody else. */}
+            {data?.is_manager ? (
+              <NotificationBell
+                count={data.low_match_unread || 0}
+                onPress={() => router.push('/notifications')}
+                accessibilityLabel={t.lowRounds}
+              />
+            ) : null}
             {/* Sign out is reachable from the landing screen, not only buried
                 in Profile - it is also the way back to a different server. */}
             <Pressable
@@ -295,27 +308,6 @@ function RoundsScreen() {
                   {data.is_manager ? (
                     <Ionicons name="chevron-forward" size={13} color={colors.white} />
                   ) : null}
-                </Pressable>
-              ) : null}
-              {/* Not drawn at all for anybody but a manager, which is the one
-                  way this differs from the Missed chip beside it -- that one
-                  shows the number to everybody and only gates the tap. How
-                  many rounds scored badly is not something to put in front of
-                  the people being measured, even as a figure they cannot open.
-
-                  The server agrees rather than trusting this: low_match_unread
-                  comes back as a flat 0 for a non-manager. */}
-              {data.is_manager && data.low_match_unread > 0 ? (
-                <Pressable
-                  onPress={() => router.push('/notifications')}
-                  accessibilityRole="button"
-                  style={[styles.missedChip, rtlRow]}
-                >
-                  <View style={styles.lowMatchDot} />
-                  <Text style={styles.missedText}>
-                    {data.low_match_unread} {t.statLowRounds}
-                  </Text>
-                  <Ionicons name="chevron-forward" size={13} color={colors.white} />
                 </Pressable>
               ) : null}
             </View>
@@ -475,10 +467,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.md,
   },
   missedDot: { width: 7, height: 7, borderRadius: 4, backgroundColor: colors.danger },
-  // Amber rather than the Missed chip's red: a round nobody walked and a round
-  // that came in low are different sizes of problem, and the colours should
-  // not claim otherwise.
-  lowMatchDot: { width: 7, height: 7, borderRadius: 4, backgroundColor: colors.warning },
   missedText: { fontSize: 12, fontWeight: '700', color: colors.white },
 
   body: { paddingHorizontal: spacing.xl, paddingTop: spacing.xl, gap: spacing.lg },

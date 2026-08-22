@@ -161,6 +161,17 @@ class CleaningRecording(models.Model):
     matched_at = fields.Datetime(
         string='Compared At', compute='_compute_match', store=True)
 
+    notification_read_ids = fields.Many2many(
+        'res.users', 'cleaning_recording_notification_read_rel',
+        'recording_id', 'user_id', string='Read By', copy=False,
+        help="Technical: which managers have read the low-round notification "
+             "for this round. "
+             "Only WHO HAS READ IT is stored. Whether the round belongs on the "
+             "list at all is still a search against the threshold, so moving "
+             "the threshold re-derives the whole history exactly as before - "
+             "storing a notification row per round would have frozen the old "
+             "number into it.")
+
     low_match_notified_at = fields.Datetime(
         string='Managers Told At', readonly=True, copy=False,
         help="Technical: when a notification went out for this round. It is "
@@ -860,14 +871,12 @@ class CleaningRecording(models.Model):
 
     @api.model
     def _low_match_unread_count(self, config):
-        """How many low rounds have arrived since this user last looked."""
+        """How many low rounds this user has not read yet - the bell's number."""
         if not config or not config.notify_low_match:
             return 0
-        domain = self._low_match_domain(config)
-        seen = self.env.user.sudo().cleaning_notifications_seen_at
-        if seen:
-            domain = domain + [('matched_at', '>', seen)]
-        return self.sudo().search_count(domain)
+        return self.sudo().search_count(
+            self._low_match_domain(config)
+            + [('notification_read_ids', 'not in', [self.env.uid])])
 
     def _notify_low_match(self):
         """Push this round to every manager with a phone registered.
@@ -974,21 +983,25 @@ class CleaningRecording(models.Model):
     # What the app's Notifications screen reads
     # ------------------------------------------------------------------
     @api.model
-    def notification_feed(self, limit=50):
-        """Low rounds, newest first, for the app.
+    def notification_feed(self, limit=50, only='all'):
+        """Low rounds, newest first, for the app's bell screen.
+
+        `only` is 'all', 'unread' or 'read' - the filter the screen offers.
+        The counts come back whichever filter is asked for, so the bell and the
+        tab labels never disagree with the list under them.
 
         Facts only - no sentences. The app words its own rows, in the language
         chosen on the phone rather than the one on the Odoo account.
 
-        The refusal for a non-manager lives HERE rather than in the app. A chip
+        The refusal for a non-manager lives HERE rather than in the app. A bell
         that is not drawn is not access control: this is reachable over call_kw
-        by anybody with a session.
+        by anybody holding a session.
         """
         is_manager = self.env.user.has_group(
             'showroom_check.group_cleaning_manager')
         empty = {
-            'is_manager': False, 'threshold': 0, 'seen_at': False,
-            'unread_count': 0, 'rows': [],
+            'is_manager': False, 'threshold': 0,
+            'unread_count': 0, 'read_count': 0, 'total_count': 0, 'rows': [],
         }
         if not is_manager:
             return empty
@@ -997,15 +1010,27 @@ class CleaningRecording(models.Model):
         if not config or not config.notify_low_match:
             return dict(empty, is_manager=True)
 
-        seen = self.env.user.sudo().cleaning_notifications_seen_at
-        rows = self.sudo().search(
-            self._low_match_domain(config),
-            order='matched_at desc, id desc', limit=limit)
+        base = self._low_match_domain(config)
+        unread_clause = [('notification_read_ids', 'not in', [self.env.uid])]
+        read_clause = [('notification_read_ids', 'in', [self.env.uid])]
+
+        Rec = self.sudo()
+        unread_count = Rec.search_count(base + unread_clause)
+        total_count = Rec.search_count(base)
+
+        domain = base
+        if only == 'unread':
+            domain = base + unread_clause
+        elif only == 'read':
+            domain = base + read_clause
+
+        rows = Rec.search(domain, order='matched_at desc, id desc', limit=limit)
         return {
             'is_manager': True,
             'threshold': config.notify_threshold,
-            'seen_at': fields.Datetime.to_string(seen) if seen else False,
-            'unread_count': self._low_match_unread_count(config),
+            'unread_count': unread_count,
+            'read_count': total_count - unread_count,
+            'total_count': total_count,
             'rows': [{
                 'id': row.id,
                 'slot_name': row.slot_id.name or '',
@@ -1014,23 +1039,46 @@ class CleaningRecording(models.Model):
                 'match_score': row.match_score,
                 'match_worst_label': row.match_worst_label or '',
                 'matched_at': fields.Datetime.to_string(row.matched_at),
-                'is_unread': bool(not seen or row.matched_at > seen),
+                'is_unread': self.env.uid not in row.notification_read_ids.ids,
             } for row in rows],
         }
 
     @api.model
-    def mark_notifications_seen(self):
-        """Everything scored up to now counts as read. Clears the badge.
+    def mark_notification_read(self, recording_ids, read=True):
+        """Mark specific rounds read or unread for the calling user.
 
-        sudo() on the user's own record: writing to res.users normally needs
-        rights nobody here has, and a person marking their OWN notifications
-        read cannot harm anything.
+        Both directions, because a bell that can only be emptied is a bell
+        somebody stops trusting: opening a round by accident should not lose
+        the one thing that said it still needed looking at.
+
+        sudo() on the link only - the rounds themselves are still found through
+        the manager check below, so this cannot be used to touch a round the
+        caller could not otherwise see.
         """
         if not self.env.user.has_group(
                 'showroom_check.group_cleaning_manager'):
             return False
-        self.env.user.sudo().cleaning_notifications_seen_at = (
-            fields.Datetime.now())
+        ids = [int(i) for i in (recording_ids or [])]
+        if not ids:
+            return False
+        link = (4, self.env.uid) if read else (3, self.env.uid)
+        self.sudo().browse(ids).write({'notification_read_ids': [link]})
+        return True
+
+    @api.model
+    def mark_all_notifications_read(self):
+        """Empty the bell. Every low round the user can see becomes read."""
+        if not self.env.user.has_group(
+                'showroom_check.group_cleaning_manager'):
+            return False
+        config = self.env['cleaning.config'].sudo()._get_for_company()
+        if not config:
+            return False
+        rounds = self.sudo().search(
+            self._low_match_domain(config)
+            + [('notification_read_ids', 'not in', [self.env.uid])])
+        if rounds:
+            rounds.write({'notification_read_ids': [(4, self.env.uid)]})
         return True
 
     def action_recompute_match(self):

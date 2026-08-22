@@ -385,37 +385,76 @@ class TestPushNotifications(TransactionCase):
             self.manager).get_dashboard_state()
         self.assertEqual(state['low_match_unread'], 1)
 
-    def test_marking_seen_clears_the_badge(self):
-        self._round(45)
+    def test_marking_one_read_clears_it_from_the_count(self):
+        rec = self._round(45)
         Recording = self.env['cleaning.recording'].with_user(self.manager)
         self.assertEqual(Recording.notification_feed()['unread_count'], 1)
 
-        Recording.mark_notifications_seen()
-        self.assertEqual(Recording.notification_feed()['unread_count'], 0)
-        # Still listed - read, not gone.
-        self.assertEqual(len(Recording.notification_feed()['rows']), 1)
+        Recording.mark_notification_read([rec.id])
+        feed = Recording.notification_feed()
+        self.assertEqual(feed['unread_count'], 0)
+        self.assertEqual(feed['read_count'], 1)
+        # Still listed under All - read, not gone.
+        self.assertEqual(len(feed['rows']), 1)
+        self.assertFalse(feed['rows'][0]['is_unread'])
 
-    def test_a_later_round_raises_the_count_again(self):
+    def test_a_round_can_be_marked_unread_again(self):
+        """A bell that can only be emptied is one people stop trusting."""
+        rec = self._round(45)
+        Recording = self.env['cleaning.recording'].with_user(self.manager)
+        Recording.mark_notification_read([rec.id])
+        self.assertEqual(Recording.notification_feed()['unread_count'], 0)
+
+        Recording.mark_notification_read([rec.id], read=False)
+        self.assertEqual(Recording.notification_feed()['unread_count'], 1)
+
+    def test_the_filters_split_the_list(self):
+        first = self._round(45, day=17)
+        self._round(30, day=18)
+        Recording = self.env['cleaning.recording'].with_user(self.manager)
+        Recording.mark_notification_read([first.id])
+
+        self.assertEqual(len(Recording.notification_feed(only='all')['rows']), 2)
+        unread = Recording.notification_feed(only='unread')['rows']
+        read = Recording.notification_feed(only='read')['rows']
+        self.assertEqual([r['id'] for r in read], [first.id])
+        self.assertNotIn(first.id, [r['id'] for r in unread])
+        self.assertEqual(len(unread), 1)
+
+    def test_mark_all_empties_the_bell(self):
         self._round(45, day=17)
+        self._round(30, day=18)
         Recording = self.env['cleaning.recording'].with_user(self.manager)
-        Recording.mark_notifications_seen()
-        self.assertEqual(Recording.notification_feed()['unread_count'], 0)
+        self.assertEqual(Recording.notification_feed()['unread_count'], 2)
 
-        later = self._round(30, day=18)
-        # Pushed a minute into the future ON PURPOSE. matched_at is stamped
-        # with the real clock at comparison time, not from slot_date, and Odoo
-        # datetimes are second-resolution - so the whole of this test runs
-        # inside the same second as mark_notifications_seen, and "arrived after
-        # you last looked" is a strict >. Without this the assertion measures
-        # how fast the machine is rather than whether the count works.
-        later.shot_ids.write({
-            'matched_at': fields.Datetime.now() + timedelta(minutes=1)})
-        later.invalidate_recordset()
-        self.assertEqual(Recording.notification_feed()['unread_count'], 1)
+        Recording.mark_all_notifications_read()
+        feed = Recording.notification_feed()
+        self.assertEqual(feed['unread_count'], 0)
+        self.assertEqual(feed['read_count'], 2)
 
-    def test_a_plain_user_cannot_mark_anything_seen(self):
+    def test_read_state_is_per_user(self):
+        """One manager reading it must not clear it for another."""
+        other = self.env['res.users'].create({
+            'name': 'Second Reader', 'login': 'push_reader_2',
+            'company_id': self.company.id,
+            'company_ids': [(6, 0, [self.company.id])],
+            'group_ids': [(4, self.env.ref(
+                'showroom_check.group_cleaning_manager').id)],
+        })
+        rec = self._round(45)
+        Recording = self.env['cleaning.recording']
+        Recording.with_user(self.manager).mark_notification_read([rec.id])
+        self.assertEqual(Recording.with_user(
+            self.manager).notification_feed()['unread_count'], 0)
+        self.assertEqual(Recording.with_user(
+            other).notification_feed()['unread_count'], 1)
+
+    def test_a_plain_user_cannot_mark_anything_read(self):
+        rec = self._round(45)
         self.assertFalse(self.env['cleaning.recording'].with_user(
-            self.cleaner).mark_notifications_seen())
+            self.cleaner).mark_notification_read([rec.id]))
+        self.assertFalse(self.env['cleaning.recording'].with_user(
+            self.cleaner).mark_all_notifications_read())
 
     # ------------------------------------------------------------------
     # Registering a phone

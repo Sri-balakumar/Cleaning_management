@@ -16,4 +16,3 @@ from . import cleaning_manual
 from . import cleaning_push_provider
 from . import cleaning_push_config
 from . import cleaning_push_device
-from . import res_users
